@@ -1,12 +1,16 @@
 from django.contrib.auth.models import User
-from django.test import TestCase
-from django.urls import reverse
+from django.test import TestCase, override_settings
+from django.urls import reverse, set_script_prefix
 
 from databases import emailotpmodels
 from hmi.models import EmailOTP, UserProfile
 
 
+@override_settings(FORCE_SCRIPT_NAME=None, STATIC_URL='/static/', MEDIA_URL='/media/')
 class AuthFlowTests(TestCase):
+    def setUp(self):
+        set_script_prefix('/')
+
     def test_signup_verify_otp_creates_operator_profile_and_requires_login(self):
         response = self.client.post(reverse("signup"), {
             "first_name": "Line Operator",

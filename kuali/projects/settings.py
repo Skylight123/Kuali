@@ -30,8 +30,54 @@ SECRET_KEY = config(
 DEBUG_VALUE = str(config('DEBUG', default='True')).strip().lower()
 DEBUG = DEBUG_VALUE not in ['0', 'false', 'no', 'off', 'release', 'prod', 'production']
 
-ALLOWED_HOSTS = [host.strip() for host in config('HOSTS', default='127.0.0.1').split(',')]
 
+def parse_csv(value):
+    return [item.strip() for item in str(value or '').split(',') if item.strip()]
+
+
+def origins_from_hosts(hosts):
+    origins = []
+    for host in hosts:
+        if not host or host == '*':
+            continue
+        normalized_host = host.rstrip('/')
+        if '://' in normalized_host:
+            origins.append(normalized_host)
+        else:
+            origins.extend([
+                f'http://{normalized_host}',
+                f'https://{normalized_host}',
+            ])
+    return origins
+
+
+HOST = config('HOST', default='').strip()
+HOSTS = parse_csv(config('HOSTS', default=HOST or '127.0.0.1'))
+ALLOWED_HOSTS = list(dict.fromkeys([
+    *HOSTS,
+    'localhost',
+    '127.0.0.1',
+]))
+
+# =========================
+# SUBPATH / REVERSE PROXY CONFIG
+# =========================
+FORCE_SCRIPT_NAME = config('FORCE_SCRIPT_NAME', default='/Kuali').strip()
+if FORCE_SCRIPT_NAME in ['', '/']:
+    FORCE_SCRIPT_NAME = None
+elif not FORCE_SCRIPT_NAME.startswith('/'):
+    FORCE_SCRIPT_NAME = f'/{FORCE_SCRIPT_NAME}'
+
+# Tidak memakai domain/public origin. Origin dipercaya dibangun dari HOSTS/IP.
+HOST_ORIGINS = origins_from_hosts(ALLOWED_HOSTS)
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(HOST_ORIGINS))
+
+# Nginx terminates TLS and forwards scheme/host to Daphne/Django.
+USE_X_FORWARDED_HOST = config('USE_X_FORWARDED_HOST', default=True, cast=bool)
+USE_X_FORWARDED_PORT = config('USE_X_FORWARDED_PORT', default=True, cast=bool)
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=not DEBUG, cast=bool)
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=not DEBUG, cast=bool)
 
 # Application definition
 INSTALLED_APPS = [
@@ -55,6 +101,7 @@ ASGI_APPLICATION = 'projects.asgi.application'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -95,12 +142,34 @@ USE_REDIS_CHANNELS = config('USE_REDIS_CHANNELS', default=False, cast=bool)
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DB_NAME = config('DB_NAME', default='')
+
+if DB_NAME:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': DB_NAME,
+            'USER': config('DB_USER', default=''),
+            'PASSWORD': config('DB_PASSWORD', default=''),
+            'HOST': config('DB_HOST', default=''),
+            'PORT': config('DB_PORT', default='3306', cast=int),
+        },
+        'sqlite_db': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        },
+        'sqlite_db': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -127,27 +196,64 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Bangkok'
 
 USE_I18N = True
 
-USE_TZ = True
+USE_TZ = False
 
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
-STATIC_URL = 'static/'
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-MEDIA_URL = 'media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+URL_PREFIX = FORCE_SCRIPT_NAME or ''
+STATIC_URL = f'{URL_PREFIX}/static/' if URL_PREFIX else '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+STATICFILES_DIRS = []
+STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
+
+MEDIA_URL = f'{URL_PREFIX}/media/' if URL_PREFIX else '/media/'
+MEDIA_ROOT = config('MEDIA_ROOT', default=os.path.join(BASE_DIR, 'media'))
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# Allow specific frontend domains to access the Django API
+CORS_ALLOWED_ORIGINS = CSRF_TRUSTED_ORIGINS
+CORS_ALLOW_CREDENTIALS = True
 
-# OTP delivery defaults to console for local HMI deployments.
-OTP_EMAIL_METHOD = config('OTP_EMAIL_METHOD', default='console')
-DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@kuali.local')
+# Setting for Gmail SMTP
+EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = config('EMAIL_HOST', default='localhost')
+EMAIL_PORT = config('EMAIL_PORT', default=25, cast=int)
+EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=False, cast=bool)
+
+EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
+EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
+DEFAULT_FROM_EMAIL = config(
+    'DEFAULT_FROM_EMAIL',
+    default=EMAIL_HOST_USER or 'noreply@kuali.local'
+)
+OTP_EMAIL_METHOD = config('OTP_EMAIL_METHOD', default='api')
+
+# MQTT integration for kitchen robot devices.
+MQTT_ENABLED = config('MQTT_ENABLED', default=False, cast=bool)
+MQTT_HOST = config('MQTT_HOST', default='localhost')
+MQTT_PORT = config('MQTT_PORT', default=1883, cast=int)
+MQTT_USERNAME = config('MQTT_USERNAME', default='')
+MQTT_PASSWORD = config('MQTT_PASSWORD', default='')
+MQTT_CLIENT_ID = config('MQTT_CLIENT_ID', default='kuali-app')
+MQTT_TOPIC_ROOT = config('MQTT_TOPIC_ROOT', default='')
+
+# SSL/TLS Settings
+#SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+#SECURE_SSL_REDIRECT = False
+#SESSION_COOKIE_SECURE = False
+#CSRF_COOKIE_SECURE = False
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
+FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800
