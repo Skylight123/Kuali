@@ -2,82 +2,110 @@
 <!doctype html>
 <html lang="id">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Kuali - Lini Masak Otomatis</title>
-    <link rel="stylesheet" href="{% static 'hmi/css/hmi/dashboard.css' %}">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Kuali HMI — Lini Masak Otomatis</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9Ikt1YWxpIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjAiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMyNDFkMTgiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxMzBmMGIiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZjBjNzc3Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZGNhMDQ5Ii8+PC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3QgeD0iMiIgeT0iMiIgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiByeD0iMTUiIGZpbGw9InVybCgjYmcpIi8+CiAgPHBhdGggZD0iTTE3IDM1IEg0NyIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTE3IDM1IFEzMiA1NiA0NyAzNSIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIi8+CiAgPHBhdGggZD0iTTMyIDMwIEMzMiAyMyA0MCAyMiAzNiAxNSIgc3Ryb2tlPSIjZGY4MjU5IiBzdHJva2Utd2lkdGg9IjQuMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIi8+Cjwvc3ZnPgo=">
+  <meta name="theme-color" content="#080c0f">
+  <link rel="stylesheet" href="{% static 'hmi/css/hmi/dashboard.css' %}">
 </head>
 <body>
 <div class="app-shell">
-    <header class="topbar">
-        <div class="brand-block">
-            <div class="brand-mark" aria-hidden="true">
-                <svg viewBox="0 0 24 24" role="img">
-                    <path d="M4 8.4c2.5-1.8 5-1.8 7.5 0s5 1.8 8.5 0"/>
-                    <path d="M4 12.2c2.5-1.8 5-1.8 7.5 0s5 1.8 8.5 0"/>
-                    <path d="M4 16c2.5-1.8 5-1.8 7.5 0s5 1.8 8.5 0"/>
-                </svg>
-            </div>
-            <div>
-                <h1>Kuali <span>HMI</span></h1>
-                <p>Lini masak otomatis / 2 cooker / 3 conveyor</p>
-            </div>
+
+  <header class="topbar">
+    <div class="brand-block">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 120 120" fill="none" width="28" height="28">
+          <path d="M30 62 H90" stroke="#ffb547" stroke-width="10" stroke-linecap="round"/>
+          <path d="M30 62 Q60 99 90 62" stroke="#ffb547" stroke-width="10" stroke-linecap="round" fill="none"/>
+          <path d="M60 55 C60 44 74 43 68 32 C62 21 47 24 54 14" stroke="#ff7a45" stroke-width="6.5" stroke-linecap="round" fill="none"/>
+        </svg>
+      </div>
+      <div>
+        <h1>Kuali <span>HMI</span></h1>
+        <p>Lini masak otomatis &nbsp;·&nbsp; 2 cooker &nbsp;/&nbsp; 3 conveyor</p>
+      </div>
+    </div>
+
+    <div class="topbar-spacer"></div>
+
+    <div id="linePill" class="line-pill is-run"><i></i><span id="lineText">LINE RUNNING</span></div>
+    <div class="header-stat"><small>Batch Aktif</small><strong id="activeBatch">0/2</strong></div>
+    <div class="header-stat"><small>Output Hari Ini</small><strong id="outputCount">0 porsi</strong></div>
+    <div class="header-stat"><small>Alarm</small><strong id="alarmCount">0</strong></div>
+    <div class="clock" id="clock">--:--:--</div>
+    <button class="tool-btn is-active" type="button" id="autoBtn">AUTO ▸ ON</button>
+    <button class="tool-btn danger" type="button" id="estopBtn">⏻ E-STOP</button>
+    <div class="user-block">
+      <span class="user-name">{{ request.user.get_short_name|default:request.user.username }}</span>
+      <form method="post" action="{% url 'logout' %}" style="display:inline;margin:0">
+        {% csrf_token %}
+        <button type="submit" class="tool-btn logout-btn" title="Keluar">Keluar</button>
+      </form>
+    </div>
+  </header>
+
+  <main class="main-grid">
+    <section class="panel process-panel">
+      <div class="panel-head">
+        <span>Process Mimic — Digital Twin</span>
+        <small id="modeTag">SIM AUTO</small>
+      </div>
+      <div class="mimic-stage" id="mimicHost"></div>
+    </section>
+
+    <aside class="side-stack">
+      <section class="panel transparent-panel">
+        <div id="cookerCards" class="cooker-stack"></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head">
+          <span>Log Peristiwa &amp; Alarm</span>
+          <button class="mini-btn" id="ackBtn" type="button">Ack Semua</button>
         </div>
+        <div class="event-log" id="eventLog"></div>
+      </section>
+    </aside>
 
-        <div class="topbar-spacer"></div>
+    <section class="panel conveyor-panel">
+      <div class="panel-head">
+        <span>Conveyor Bahan</span>
+        <small>3 lane · metered feed</small>
+      </div>
+      <div id="conveyorGrid" class="conveyor-grid"></div>
+    </section>
 
-        <div id="linePill" class="line-pill is-run"><i></i><span id="lineText">LINE RUNNING</span></div>
-        <div class="header-stat"><small>Batch Aktif</small><strong id="activeBatch">0/2</strong></div>
-        <div class="header-stat"><small>Output Hari Ini</small><strong id="outputCount">0 porsi</strong></div>
-        <div class="header-stat"><small>Alarm</small><strong id="alarmCount">0</strong></div>
-        <div class="clock" id="clock">--:--:--</div>
-        <button class="tool-btn is-active" type="button" id="autoBtn">AUTO</button>
-        <button class="tool-btn danger" type="button" id="estopBtn">E-STOP</button>
-    </header>
+    <section class="panel recipe-panel">
+      <div class="panel-head">
+        <span>Line Overview</span>
+        <small>ready for websocket / modbus</small>
+      </div>
+      <div class="overview-grid">
+        <div>
+          <small>Set Temp</small>
+          <strong>225 °C</strong>
+          <span>target cooker</span>
+        </div>
+        <div>
+          <small>Cycle Avg</small>
+          <strong>24 s</strong>
+          <span>per batch demo</span>
+        </div>
+        <div>
+          <small>Safety</small>
+          <strong id="safetyState">NORMAL</strong>
+          <span>interlock active</span>
+        </div>
+        <div>
+          <small>Operator</small>
+          <strong>{{ request.user.get_short_name|default:request.user.username }}</strong>
+          <span>authenticated</span>
+        </div>
+      </div>
+    </section>
+  </main>
 
-    <main class="main-grid">
-        <section class="panel process-panel">
-            <div class="panel-head">
-                <span>Process Mimic</span>
-                <small id="modeTag">SIM AUTO</small>
-            </div>
-            <div class="mimic-stage" id="mimicHost"></div>
-        </section>
-
-        <aside class="side-stack">
-            <section class="panel transparent-panel">
-                <div id="cookerCards" class="cooker-stack"></div>
-            </section>
-            <section class="panel">
-                <div class="panel-head">
-                    <span>Log Peristiwa</span>
-                    <button class="mini-btn" id="ackBtn" type="button">ACK</button>
-                </div>
-                <div class="event-log" id="eventLog"></div>
-            </section>
-        </aside>
-
-        <section class="panel conveyor-panel">
-            <div class="panel-head">
-                <span>Conveyor Bahan</span>
-                <small>metered feed</small>
-            </div>
-            <div id="conveyorGrid" class="conveyor-grid"></div>
-        </section>
-
-        <section class="panel recipe-panel">
-            <div class="panel-head">
-                <span>Line Overview</span>
-                <small>ready for websocket/modbus</small>
-            </div>
-            <div class="overview-grid">
-                <div><small>Set Temp</small><strong>225 C</strong><span>target cooker</span></div>
-                <div><small>Cycle Avg</small><strong>24 s</strong><span>per batch demo</span></div>
-                <div><small>Safety</small><strong id="safetyState">NORMAL</strong><span>interlock active</span></div>
-                <div><small>Operator</small><strong>{{ request.user.get_short_name|default:request.user.username }}</strong><span>authenticated</span></div>
-            </div>
-        </section>
-    </main>
+  <div class="footnote">Kuali HMI v1.0 &nbsp;·&nbsp; SVG digital twin &nbsp;·&nbsp; siap integrasi WebSocket / Modbus RTU via <code>window.KualiHMI</code></div>
 </div>
 <script src="{% static 'hmi/js/hmi/dashboard.js' %}"></script>
 </body>

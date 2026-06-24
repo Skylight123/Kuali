@@ -6,22 +6,22 @@ from django.core.exceptions import ValidationError
 
 class LoginForm(forms.Form):
     username = forms.CharField(
-        label="Username atau email",
+        label="Email atau username",
         max_length=150,
         widget=forms.TextInput(
             attrs={
                 "class": "auth-input",
-                "placeholder": "operator@zenith.local",
+                "placeholder": "nama@dapurmu.id",
                 "autocomplete": "username",
             }
         ),
     )
     password = forms.CharField(
-        label="Password",
+        label="Kata sandi",
         widget=forms.PasswordInput(
             attrs={
                 "class": "auth-input",
-                "placeholder": "Masukkan password",
+                "placeholder": "••••••••",
                 "autocomplete": "current-password",
             }
         ),

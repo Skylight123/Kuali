@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Kuali">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#241d18"/><stop offset="1" stop-color="#130f0b"/></linearGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0c777"/><stop offset="1" stop-color="#dca049"/></linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#bg)"/>
+  <path d="M17 35 H47" stroke="url(#g)" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M17 35 Q32 56 47 35" stroke="url(#g)" stroke-width="5.5" stroke-linecap="round" fill="none"/>
+  <path d="M32 30 C32 23 40 22 36 15" stroke="#df8259" stroke-width="4.2" stroke-linecap="round" fill="none"/>
+</svg>

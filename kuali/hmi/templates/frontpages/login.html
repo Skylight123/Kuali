@@ -2,52 +2,432 @@
 <!doctype html>
 <html lang="id">
 <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Kuali - Login</title>
-    <link rel="stylesheet" href="{% static 'hmi/css/frontpages/auth.css' %}">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Masuk · Kuali</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA2NCA2NCIgd2lkdGg9IjY0IiBoZWlnaHQ9IjY0IiByb2xlPSJpbWciIGFyaWEtbGFiZWw9Ikt1YWxpIj4KICA8ZGVmcz4KICAgIDxsaW5lYXJHcmFkaWVudCBpZD0iYmciIHgxPSIwIiB5MT0iMCIgeDI9IjAiIHkyPSIxIj48c3RvcCBvZmZzZXQ9IjAiIHN0b3AtY29sb3I9IiMyNDFkMTgiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9IiMxMzBmMGIiLz48L2xpbmVhckdyYWRpZW50PgogICAgPGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjZjBjNzc3Ii8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjZGNhMDQ5Ii8+PC9saW5lYXJHcmFkaWVudD4KICA8L2RlZnM+CiAgPHJlY3QgeD0iMiIgeT0iMiIgd2lkdGg9IjYwIiBoZWlnaHQ9IjYwIiByeD0iMTUiIGZpbGw9InVybCgjYmcpIi8+CiAgPHBhdGggZD0iTTE3IDM1IEg0NyIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIi8+CiAgPHBhdGggZD0iTTE3IDM1IFEzMiA1NiA0NyAzNSIgc3Ryb2tlPSJ1cmwoI2cpIiBzdHJva2Utd2lkdGg9IjUuNSIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIi8+CiAgPHBhdGggZD0iTTMyIDMwIEMzMiAyMyA0MCAyMiAzNiAxNSIgc3Ryb2tlPSIjZGY4MjU5IiBzdHJva2Utd2lkdGg9IjQuMiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBmaWxsPSJub25lIi8+Cjwvc3ZnPgo=">
+<meta name="theme-color" content="#171210">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,ital,wght@9..144,0,400;9..144,0,500;9..144,0,600;9..144,1,500&family=Poppins:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --char: #150f0c;
+  --card-bg: #1c1611;
+  --gold: #e7b15a;
+  --goldd: #c9912a;
+  --clay: #d2724e;
+  --cream: #f3ece1;
+  --muted: #a99986;
+  --faint: #766456;
+  --line: #352a20;
+  --err: #e06a5a;
+  --mono: 'IBM Plex Mono', monospace;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: 'Poppins', sans-serif;
+  color: var(--cream);
+  background:
+    radial-gradient(620px 420px at 78% 12%, #3a2615 0%, transparent 60%),
+    radial-gradient(560px 460px at 14% 92%, #2c1a12 0%, transparent 58%),
+    var(--char);
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  position: relative;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  box-shadow: inset 0 0 220px 40px #0c0805aa;
+}
+
+/* --- Background mark --- */
+.bgmark {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 0;
+}
+.bgmark svg { width: min(78vw, 720px); opacity: .045; }
+
+/* --- Steam wisps --- */
+.wisps {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 0;
+  pointer-events: none;
+  opacity: .5;
+}
+.steam { animation: rise 4s ease-in-out infinite; }
+.steam.b { animation-duration: 4.8s; animation-delay: .8s; }
+.steam.c { animation-duration: 3.4s; animation-delay: 1.6s; }
+@keyframes rise {
+  0%   { opacity: 0; transform: translateY(10px); }
+  40%  { opacity: .55; }
+  100% { opacity: 0; transform: translateY(-26px); }
+}
+
+/* --- Card --- */
+.card {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 418px;
+  background: linear-gradient(180deg, #211a14, #171109);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 38px 34px 28px;
+  box-shadow: 0 30px 80px -20px #000000aa, 0 0 0 1px #ffffff06 inset;
+}
+.card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 26px;
+  right: 26px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, transparent, var(--gold), var(--clay), transparent);
+  opacity: .8;
+}
+
+/* --- Top section --- */
+.top {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 24px;
+}
+.top .logo { margin-bottom: 12px; }
+.tagline {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .1em;
+  color: var(--gold);
+  margin-bottom: 18px;
+}
+.eye {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  color: var(--clay);
+}
+.top h1 {
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  font-size: 27px;
+  margin: 9px 0 5px;
+  letter-spacing: -.01em;
+}
+.top h1 em { font-style: italic; color: var(--gold); }
+.top p { color: var(--muted); font-size: 13.5px; margin: 0; max-width: 300px; }
+
+/* --- Messages --- */
+.msgs { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.msg { padding: 10px 13px; border-radius: 10px; font-size: 12.5px; border: 1px solid; line-height: 1.45; }
+.msg.success { color: #c5f0d4; border-color: #2d6645; background: #0e2219; }
+.msg.error   { color: #ffd4d4; border-color: #7a3030; background: #251010; }
+.msg.warning { color: #ffe3a8; border-color: #7a6025; background: #251e08; }
+.msg.info    { color: #c6edff; border-color: #2d657c; background: #0e2028; }
+
+/* --- Form fields --- */
+.field { margin-bottom: 14px; }
+.field label {
+  display: block;
+  font-size: 12.5px;
+  color: var(--muted);
+  margin-bottom: 7px;
+}
+.inp {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.inp svg.pre {
+  position: absolute;
+  left: 13px;
+  color: var(--faint);
+  pointer-events: none;
+}
+.auth-input {
+  width: 100%;
+  background: #130e0a;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 13px 14px 13px 40px;
+  color: var(--cream);
+  font-family: 'Poppins', sans-serif;
+  font-size: 14.5px;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.auth-input::placeholder { color: #6f5e50; }
+.auth-input:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px #e7b15a22;
+}
+.field.has-err .auth-input { border-color: var(--err); }
+.err {
+  color: var(--err);
+  font-size: 11.5px;
+  margin-top: 6px;
+}
+
+/* --- Password toggle --- */
+.toggle {
+  position: absolute;
+  right: 6px;
+  background: none;
+  border: 0;
+  color: var(--faint);
+  cursor: pointer;
+  padding: 8px;
+  display: grid;
+  place-items: center;
+}
+.toggle:hover { color: var(--muted); }
+
+/* --- Row (remember + forgot) --- */
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 4px 0 20px;
+  font-size: 13px;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  cursor: pointer;
+  user-select: none;
+}
+.check input { accent-color: var(--gold); width: 15px; height: 15px; }
+a { color: var(--gold); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* --- Submit button --- */
+.btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  font-size: 15px;
+  padding: 13px 20px;
+  border-radius: 12px;
+  cursor: pointer;
+  border: 0;
+  background: var(--gold);
+  color: #231a10;
+  transition: background .16s, transform .1s;
+}
+.btn:hover { background: #f0c073; }
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: .7; cursor: default; }
+
+/* --- Footer links --- */
+.foot {
+  margin-top: 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+.kabbr {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px 12px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.kabbr span {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+  letter-spacing: .02em;
+}
+.kabbr b { color: var(--gold); font-weight: 600; margin-right: 5px; }
+
+/* --- Spinner --- */
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #231a1066;
+  border-top-color: #231a10;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+button:focus-visible, input:focus-visible, a:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; }
+}
+</style>
 </head>
 <body>
-<main class="auth-page">
-    <section class="auth-panel">
-        <div class="brand-row">
-            <div class="brand-mark" aria-hidden="true"><span>K</span></div>
-            <div><strong>Kuali</strong><small>operator access</small></div>
-        </div>
-        <div class="process-preview" aria-hidden="true">
-            <div class="preview-line"><span></span><i></i><span></span></div>
-            <div class="preview-line second"><span></span><i></i><span></span></div>
-            <div class="preview-cookers"><b></b><b></b></div>
-        </div>
-        <div class="auth-copy">
-            <small>Secure station</small>
-            <h1>Masuk ke ruang kendali masak.</h1>
-            <p>Pantau conveyor, cooker, batch, dan alarm dari dashboard HMI yang sama.</p>
-        </div>
-        <footer>HMI local console / v1.0</footer>
-    </section>
-    <section class="auth-card">
-        <h2>Login operator</h2>
-        <p class="auth-subtitle">Gunakan akun yang sudah diverifikasi OTP.</p>
-        <nav class="tab-row" aria-label="Navigasi auth">
-            <a class="tab-btn active" href="{% url 'login' %}">Login</a>
-            <a class="tab-btn" href="{% url 'signup' %}">Signup</a>
-        </nav>
-        {% include 'frontpages/partials/auth_messages.html' %}
-        <form method="post" class="auth-form">
-            {% csrf_token %}
-            <input type="hidden" name="next" value="{{ next }}">
-            {% include 'frontpages/partials/form_field.html' with field=form.username icon='user' %}
-            {% include 'frontpages/partials/form_field.html' with field=form.password icon='lock' password_toggle=True %}
-            <div class="auth-extra">
-                <label><input type="checkbox" name="remember"> Ingat sesi</label>
-                <a href="{% url 'forgot_password' %}">Forgot password</a>
-            </div>
-            <button class="primary-btn" type="submit">Login</button>
-        </form>
-        <p class="auth-footer">Belum punya akses? <a href="{% url 'signup' %}">Signup operator</a></p>
-    </section>
+
+<div class="bgmark">
+  <svg viewBox="0 0 120 120" fill="none">
+    <path d="M16 61 H28 M92 61 H104" stroke="#e7b15a" stroke-width="6.5" stroke-linecap="round"/>
+    <path d="M30 62 H90" stroke="#e7b15a" stroke-width="8.5" stroke-linecap="round"/>
+    <path d="M30 62 Q60 99 90 62" stroke="#e7b15a" stroke-width="8.5" stroke-linecap="round" fill="none"/>
+    <path d="M60 55 C60 45 72 44 67 34 C62.5 25 49 27 55 17" stroke="#d2724e" stroke-width="5" stroke-linecap="round" fill="none"/>
+  </svg>
+</div>
+
+<svg class="wisps" width="140" height="90" viewBox="0 0 140 90" fill="none" stroke="#e7d6c2" stroke-width="3" stroke-linecap="round">
+  <path class="steam"   d="M40 80 q-9 -14 0 -28 q9 -12 0 -26"/>
+  <path class="steam b" d="M70 78 q10 -15 0 -30 q-10 -12 0 -26"/>
+  <path class="steam c" d="M100 80 q-9 -14 0 -26 q9 -11 0 -24"/>
+</svg>
+
+<main class="card">
+  <div class="top">
+    <div class="logo">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 338.1 120" width="290" height="38" fill="none" role="img" aria-label="Kuali">
+        <defs>
+          <linearGradient id="kg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#efc472"/><stop offset="1" stop-color="#d99a42"/>
+          </linearGradient>
+        </defs>
+        <g transform="translate(2.0,12.0) scale(0.8)">
+          <path d="M16 61 H28 M92 61 H104" stroke="url(#kg)" stroke-width="6.5" stroke-linecap="round"/>
+          <path d="M30 62 H90" stroke="url(#kg)" stroke-width="8.5" stroke-linecap="round"/>
+          <path d="M30 62 Q60 99 90 62" stroke="url(#kg)" stroke-width="8.5" stroke-linecap="round" fill="none"/>
+          <path d="M60 55 C60 45 72 44 67 34 C62.5 25 49 27 55 17" stroke="#d2724e" stroke-width="5" stroke-linecap="round" fill="none"/>
+        </g>
+        <g fill="#f3ece1" transform="translate(117.91,94.21) scale(0.08827,-0.08827)">
+          <path d="M397 0 209 236V0H69V740H209V319L395 554H577L333 276L579 0Z" transform="translate(0,0)"/>
+          <path d="M592 554V0H451V70Q424 34 380.5 13.5Q337 -7 286 -7Q221 -7 171.0 20.5Q121 48 92.5 101.5Q64 155 64 229V554H204V249Q204 183 237.0 147.5Q270 112 327 112Q385 112 418.0 147.5Q451 183 451 249V554Z" transform="translate(584,0)"/>
+          <path d="M286 563Q348 563 394.5 538.0Q441 513 469 475V554H610V0H469V81Q442 42 394.5 16.5Q347 -9 285 -9Q215 -9 157.5 27.0Q100 63 66.5 128.5Q33 194 33 279Q33 363 66.5 428.0Q100 493 157.5 528.0Q215 563 286 563ZM322 440Q283 440 250.0 421.0Q217 402 196.5 365.5Q176 329 176 279Q176 229 196.5 191.5Q217 154 250.5 134.0Q284 114 322 114Q361 114 395.0 133.5Q429 153 449.0 189.5Q469 226 469 277Q469 328 449.0 364.5Q429 401 395.0 420.5Q361 440 322 440Z" transform="translate(1245,0)"/>
+          <path d="M209 740V0H69V740Z" transform="translate(1923,0)"/>
+          <path d="M54 702Q54 737 78.5 760.5Q103 784 140 784Q177 784 201.5 760.5Q226 737 226 702Q226 667 201.5 643.5Q177 620 140 620Q103 620 78.5 643.5Q54 667 54 702ZM209 554V0H69V554Z" transform="translate(2201,0)"/>
+        </g>
+      </svg>
+    </div>
+    <div class="tagline">Kitchen Unit · Adaptive Line Intelligence</div>
+    <div class="eye">Selamat datang kembali</div>
+    <h1>Masuk ke <em>dapurmu</em></h1>
+    <p>Pantau mesin, atur resep, dan lihat laporan produksi.</p>
+  </div>
+
+  {% if messages %}
+  <div class="msgs">
+    {% for message in messages %}
+    <div class="msg {{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" id="loginForm" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+
+    <div class="field{% if form.username.errors %} has-err{% endif %}">
+      <label for="{{ form.username.id_for_label }}">{{ form.username.label }}</label>
+      <div class="inp">
+        <svg class="pre" width="17" height="17" viewBox="0 0 24 24" fill="none">
+          <rect x="3" y="5" width="18" height="14" rx="2.5" stroke="currentColor" stroke-width="2"/>
+          <path d="M4 7l8 6 8-6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        {{ form.username }}
+      </div>
+      {% if form.username.errors %}
+      <div class="err">{{ form.username.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    <div class="field{% if form.password.errors %} has-err{% endif %}">
+      <label for="{{ form.password.id_for_label }}">{{ form.password.label }}</label>
+      <div class="inp">
+        <svg class="pre" width="17" height="17" viewBox="0 0 24 24" fill="none">
+          <rect x="4" y="10" width="16" height="11" rx="2.5" stroke="currentColor" stroke-width="2"/>
+          <path d="M8 10V7a4 4 0 0 1 8 0v3" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        {{ form.password }}
+        <button type="button" class="toggle" id="togPass" aria-label="Tampilkan sandi">
+          <svg id="eye-open" width="19" height="19" viewBox="0 0 24 24" fill="none">
+            <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" stroke="currentColor" stroke-width="2"/>
+            <circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          <svg id="eye-off" width="19" height="19" viewBox="0 0 24 24" fill="none" style="display:none">
+            <path d="M3 3l18 18M10.6 10.7a3 3 0 0 0 4 4M9.4 5.2A10 10 0 0 1 12 5c6 0 10 7 10 7a18 18 0 0 1-3.2 3.8M6.2 6.3A18 18 0 0 0 2 12s4 7 10 7a10 10 0 0 0 2.3-.3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+      {% if form.password.errors %}
+      <div class="err">{{ form.password.errors.0 }}</div>
+      {% endif %}
+    </div>
+
+    <div class="row">
+      <label class="check"><input type="checkbox" name="remember"> Ingat saya</label>
+      <a href="{% url 'forgot_password' %}">Lupa sandi?</a>
+    </div>
+
+    <button class="btn" type="submit" id="submitBtn">Masuk →</button>
+  </form>
+
+  <div class="foot">Belum punya akun? <a href="{% url 'signup' %}">Daftar operator →</a></div>
+
+  <div class="kabbr">
+    <span><b>K</b>Kitchen</span>
+    <span><b>U</b>Unit</span>
+    <span><b>A</b>Adaptive</span>
+    <span><b>L</b>Line</span>
+    <span><b>I</b>Intelligence</span>
+  </div>
 </main>
-<script src="{% static 'hmi/js/frontpages/auth.js' %}"></script>
+
+<script>
+(function () {
+  var togBtn = document.getElementById('togPass');
+  var passInput = document.getElementById('id_password');
+  var eyeOpen = document.getElementById('eye-open');
+  var eyeOff = document.getElementById('eye-off');
+  if (togBtn && passInput) {
+    togBtn.addEventListener('click', function () {
+      var show = passInput.type === 'password';
+      passInput.type = show ? 'text' : 'password';
+      eyeOpen.style.display = show ? 'none' : '';
+      eyeOff.style.display = show ? '' : 'none';
+      togBtn.setAttribute('aria-label', show ? 'Sembunyikan sandi' : 'Tampilkan sandi');
+    });
+  }
+  var form = document.getElementById('loginForm');
+  var btn = document.getElementById('submitBtn');
+  if (form && btn) {
+    form.addEventListener('submit', function () {
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Memproses…';
+    });
+  }
+})();
+</script>
 </body>
 </html>
