@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NoodleFlow HMI — Lini Masak Mie Goreng Otomatis</title>
+<style>
+/* ------------------------------------------------------------------ *
+ *  NoodleFlow HMI  —  design tokens
+ *  Dark industrial mimic. Warna dipakai disiplin: hampir semua warna
+ *  dipesan untuk STATUS (run/idle/warn/fault/cook/route) dan untuk
+ *  KODE-WARNA BAHAN (mie/garam/merica/sauce/topping). Sisanya monokrom.
+ * ------------------------------------------------------------------ */
+@import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+:root{
+  --bg:#0a0f13; --bg2:#0f161c; --panel:#121b22; --card:#17222b; --card2:#1c2935;
+  --line:#26343f; --line2:#34485706; --edge:#2f414e;
+  --txt:#e3ebf1; --dim:#90a2af; --faint:#5f7280;
+  --accent:#ffb547;            /* gold — dipakai sangat tipis */
+  --run:#34d27b; --idle:#5d6b75; --warn:#f4b740; --fault:#ff5252;
+  --cook:#ff7a45; --route:#46c6ff; --done:#7c5cff;
+  --steel-hi:#aeb9c2; --steel-lo:#5b6770; --interior:#0c1216;
+
+  --mie:#e8b94a; --garam:#e2e8ef; --merica:#9b8978; --sauce:#d6453e;
+  --top1:#54b85c; --top2:#e8843a; --top3:#a874e0;
+
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+  --disp:'Chakra Petch',system-ui,sans-serif;
+  --body:'Chakra Petch',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --r:10px;
+}
+
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{
+  background:
+    radial-gradient(1200px 600px at 80% -10%, #13202a 0%, transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, #131d16 0%, transparent 55%),
+    var(--bg);
+  color:var(--txt); font-family:var(--body); font-size:14px;
+  -webkit-font-smoothing:antialiased;
+}
+.app{display:flex;flex-direction:column;min-height:100vh;gap:10px;padding:10px;max-width:1680px;margin:0 auto}
+
+/* ---------- HEADER ---------- */
+header{
+  display:flex;align-items:center;gap:18px;flex-wrap:wrap;
+  background:linear-gradient(180deg,#15212a,#101820);
+  border:1px solid var(--line);border-radius:var(--r);padding:10px 16px;
+  position:relative;overflow:hidden;
+}
+header::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--accent);opacity:.85}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.logo{width:34px;height:34px;border-radius:8px;display:grid;place-items:center;
+  background:radial-gradient(circle at 30% 25%,#2a3a47,#0e161c);border:1px solid var(--edge);flex:none}
+.logo svg{width:22px;height:22px}
+.brand h1{font-family:var(--disp);font-size:16px;font-weight:700;letter-spacing:.04em;margin:0;line-height:1.05}
+.brand p{margin:0;color:var(--faint);font-size:10.5px;letter-spacing:.22em;text-transform:uppercase}
+.spacer{flex:1 1 auto}
+.hstat{display:flex;flex-direction:column;gap:2px;padding:0 14px;border-left:1px solid var(--line);min-width:74px}
+.hstat .k{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--faint)}
+.hstat .v{font-family:var(--mono);font-size:17px;font-weight:600;line-height:1}
+.hstat .v small{font-size:10px;color:var(--dim);font-weight:400}
+.linepill{display:inline-flex;align-items:center;gap:7px;font-family:var(--disp);font-weight:600;
+  font-size:12px;letter-spacing:.08em;padding:6px 12px;border-radius:999px;border:1px solid var(--edge);background:#0e161c}
+.linepill .dot{width:9px;height:9px;border-radius:50%}
+.is-RUN{color:var(--run)} .is-RUN .dot{background:var(--run);box-shadow:0 0 10px var(--run)}
+.is-STOP{color:var(--idle)} .is-STOP .dot{background:var(--idle)}
+.is-ESTOP{color:var(--fault);border-color:var(--fault);background:#1c0f10} .is-ESTOP .dot{background:var(--fault);box-shadow:0 0 12px var(--fault);animation:blink 1s steps(2) infinite}
+@keyframes blink{50%{opacity:.25}}
+.clock{font-family:var(--mono);font-size:13px;color:var(--dim);min-width:118px;text-align:right}
+.btn{font-family:var(--disp);font-weight:600;letter-spacing:.04em;font-size:12px;cursor:pointer;
+  border:1px solid var(--edge);background:#18242d;color:var(--txt);padding:8px 13px;border-radius:8px;transition:.12s}
+.btn:hover{border-color:#46606f;background:#1e2d38}
+.btn:active{transform:translateY(1px)}
+.btn.toggle.on{border-color:var(--run);color:var(--run);background:#11241b}
+.btn.estop{border-color:#7a2222;color:#ffd2d2;background:linear-gradient(180deg,#7a1d1d,#561414);font-weight:700;letter-spacing:.1em}
+.btn.estop:hover{background:linear-gradient(180deg,#911f1f,#6a1616)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ---------- MAIN GRID ---------- */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 366px;gap:10px;align-items:start}
+@media (max-width:1180px){.main{grid-template-columns:1fr}}
+.col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.panel > .ph{display:flex;align-items:center;gap:8px;padding:9px 13px;border-bottom:1px solid var(--line);
+  font-family:var(--disp);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim)}
+.panel > .ph .tag{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.04em}
+
+/* ---------- MIMIC ---------- */
+.mimic{padding:6px}
+.mimic svg{display:block;width:100%;height:auto}
+
+/* ---------- CONVEYOR STRIP ---------- */
+.cvgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;padding:11px}
+@media (max-width:760px){.cvgrid{grid-template-columns:repeat(2,1fr)}}
+.cv{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:9px 10px;display:flex;flex-direction:column;gap:7px}
+.cv.run{border-color:#2c5f7a;box-shadow:0 0 0 1px #1d3d4f inset}
+.cv .top{display:flex;align-items:center;gap:7px}
+.cv .swatch{width:12px;height:12px;border-radius:3px;flex:none;border:1px solid #ffffff22}
+.cv .nm{font-family:var(--disp);font-weight:600;font-size:12px;letter-spacing:.02em}
+.cv .id{margin-left:auto;font-family:var(--mono);font-size:9.5px;color:var(--faint)}
+.cv .mid{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--dim)}
+.cv .belt{flex:1;height:6px;border-radius:3px;background:#0c141a;overflow:hidden;position:relative}
+.cv .belt i{position:absolute;inset:0;background:repeating-linear-gradient(90deg,#2c4252 0 6px,transparent 6px 12px);opacity:0}
+.cv.run .belt i{opacity:.9;animation:beltscroll .5s linear infinite}
+@keyframes beltscroll{to{transform:translateX(12px)}}
+.cv .bot{display:flex;align-items:center;justify-content:space-between;font-family:var(--mono);font-size:10px}
+.cv .st{display:inline-flex;align-items:center;gap:5px;color:var(--faint);text-transform:uppercase;letter-spacing:.08em}
+.cv .st b{width:7px;height:7px;border-radius:50%;background:var(--idle)}
+.cv.run .st{color:var(--route)} .cv.run .st b{background:var(--route);box-shadow:0 0 8px var(--route)}
+.cv .tgt{color:var(--dim)} .cv.run .tgt{color:var(--txt)}
+
+/* ---------- STIRRER CARDS ---------- */
+.scard{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px;display:flex;flex-direction:column;gap:10px;position:relative;overflow:hidden}
+.scard::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--idle);transition:.2s}
+.scard[data-state=DISPENSING]::before{background:var(--route)}
+.scard[data-state=COOKING]::before{background:var(--cook)}
+.scard[data-state=DONE]::before{background:var(--done)}
+.scard[data-state=HOLD]::before{background:var(--warn)}
+.scard .hd{display:flex;align-items:center;gap:9px}
+.scard .hd .n{font-family:var(--disp);font-weight:700;font-size:14px;letter-spacing:.03em}
+.scard .hd .batch{font-family:var(--mono);font-size:10px;color:var(--faint)}
+.pill{margin-left:auto;font-family:var(--disp);font-weight:600;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  padding:4px 9px;border-radius:999px;border:1px solid var(--edge);color:var(--idle)}
+.pill[data-s=IDLE]{color:var(--idle)}
+.pill[data-s=DISPENSING]{color:var(--route);border-color:#2c5f7a;background:#0e1f29}
+.pill[data-s=COOKING]{color:var(--cook);border-color:#6a3722;background:#241410}
+.pill[data-s=DONE]{color:var(--done);border-color:#43338a;background:#16122a}
+.pill[data-s=HOLD]{color:var(--warn);border-color:#6a5a22;background:#231e0c}
+.readouts{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
+.ro{background:#0d151b;border:1px solid var(--line);border-radius:8px;padding:7px 9px}
+.ro .k{font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.ro .v{font-family:var(--mono);font-size:18px;font-weight:600;line-height:1.15;margin-top:2px}
+.ro .v small{font-size:10px;color:var(--dim);font-weight:400}
+.ro.temp .v{color:var(--cook)} .ro.cooking-off .v{color:var(--txt)}
+.prog{height:6px;border-radius:3px;background:#0c141a;overflow:hidden}
+.prog i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--route),var(--cook));transition:width .3s}
+.recipe{display:flex;flex-direction:column;gap:5px}
+.recipe .rh{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim)}
+.recipe select{margin-left:auto;font-family:var(--mono);font-size:10.5px;background:#0d151b;color:var(--txt);
+  border:1px solid var(--edge);border-radius:6px;padding:4px 6px}
+.ings{display:flex;flex-wrap:wrap;gap:5px}
+.ing{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--dim);
+  background:#0d151b;border:1px solid var(--line);border-radius:6px;padding:3px 7px;transition:.15s}
+.ing b{width:8px;height:8px;border-radius:2px;flex:none}
+.ing.done{color:var(--run);border-color:#1f4a36}
+.ing.active{color:var(--route);border-color:#2c5f7a;box-shadow:0 0 8px #46c6ff44}
+.ing.skip{opacity:.34}
+.actions{display:flex;gap:7px}
+.actions .btn{flex:1;text-align:center;padding:9px 0}
+.btn.start{border-color:#2f6a47;color:#bff0d2;background:#10241a}
+.btn.start:hover{background:#163322}
+.btn.start:disabled{opacity:.4;cursor:not-allowed}
+.btn.stop:hover{border-color:#7a3030;color:#ffd0d0}
+.btn.hold.on{border-color:var(--warn);color:var(--warn);background:#221d0a}
+
+/* ---------- ALARM LOG ---------- */
+.log{max-height:236px;overflow:auto;padding:4px 0}
+.log .row{display:grid;grid-template-columns:62px 14px 1fr;gap:8px;align-items:start;padding:6px 13px;border-bottom:1px solid #1b2730;font-family:var(--mono);font-size:11px}
+.log .row:last-child{border-bottom:0}
+.log .t{color:var(--faint);font-size:10px}
+.log .lv{width:8px;height:8px;border-radius:50%;margin-top:3px}
+.log .lv.info{background:var(--route)} .log .lv.warn{background:var(--warn)} .log .lv.fault{background:var(--fault)} .log .lv.ok{background:var(--run)}
+.log .msg{color:var(--dim);line-height:1.35}
+.log .msg b{color:var(--txt);font-weight:600}
+.log::-webkit-scrollbar{width:8px}
+.log::-webkit-scrollbar-thumb{background:#22323d;border-radius:4px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 14px;padding:10px 13px;border-top:1px solid var(--line)}
+.legend span{display:inline-flex;align-items:center;gap:6px;font-size:10px;color:var(--faint);font-family:var(--mono);letter-spacing:.03em}
+.legend i{width:9px;height:9px;border-radius:2px}
+
+.footnote{color:var(--faint);font-size:10.5px;font-family:var(--mono);text-align:center;padding:4px 0 8px;letter-spacing:.02em}
+
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important}}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===================== HEADER ===================== -->
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M3 8c3-2 6-2 9 0s6 2 9 0" stroke="#ffb547" stroke-width="1.8" stroke-linecap="round"/><path d="M3 12c3-2 6-2 9 0s6 2 9 0" stroke="#46c6ff" stroke-width="1.8" stroke-linecap="round"/><path d="M3 16c3-2 6-2 9 0s6 2 9 0" stroke="#34d27b" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </div>
+      <div>
+        <h1>NoodleFlow <span style="color:var(--accent)">·</span> Lini Masak Otomatis</h1>
+        <p>Mie Goreng &nbsp;/&nbsp; 2 Stirrer · 3 Conveyor</p>
+      </div>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div id="linePill" class="linepill is-RUN"><span class="dot"></span><span id="lineTxt">LINE RUNNING</span></div>
+    <div class="hstat"><div class="k">Batch Aktif</div><div class="v" id="hActive">0<small>/2</small></div></div>
+    <div class="hstat"><div class="k">Output Hari Ini</div><div class="v" id="hOut">0<small> porsi</small></div></div>
+    <div class="hstat"><div class="k">Alarm</div><div class="v" id="hAlarm" style="color:var(--run)">0</div></div>
+    <div class="clock" id="clock">--:--:--</div>
+
+    <button class="btn toggle on" id="simBtn">AUTO ▸ ON</button>
+    <button class="btn estop" id="estopBtn">⏻ E-STOP</button>
+  </header>
+
+  <!-- ===================== MAIN ===================== -->
+  <div class="main">
+
+    <!-- LEFT: mimic + conveyor strip -->
+    <div class="col">
+      <section class="panel">
+        <div class="ph">Process Mimic — Digital Twin <span class="tag" id="mimicTag">SIM</span></div>
+        <div class="mimic"><div id="mimicHost"></div></div>
+      </section>
+
+      <section class="panel">
+        <div class="ph">Conveyor Bahan <span class="tag">3 LANE · METERED FEED</span></div>
+        <div class="cvgrid" id="cvGrid"></div>
+      </section>
+    </div>
+
+    <!-- RIGHT: stirrer controls + alarm log -->
+    <div class="col">
+      <section class="panel" style="background:transparent;border:0">
+        <div id="stirrerCards" style="display:flex;flex-direction:column;gap:10px"></div>
+      </section>
+
+      <section class="panel">
+        <div class="ph">Log Peristiwa &amp; Alarm <button class="btn" id="ackBtn" style="margin-left:auto;padding:4px 9px;font-size:10px">Ack semua</button></div>
+        <div class="log" id="log"></div>
+        <div class="legend">
+          <span><i style="background:var(--sauce)"></i>Sauce</span>
+          <span><i style="background:var(--top1)"></i>Topping 1</span>
+          <span><i style="background:var(--top2)"></i>Topping 2</span>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <div class="footnote">NoodleFlow HMI v1.0 · SVG digital twin · siap integrasi WebSocket / Modbus RTU via <code>window.NoodleHMI</code></div>
+</div>
+
+<script>
+/* ==================================================================
+ *  NoodleFlow HMI — engine
+ *  ------------------------------------------------------------------
+ *  Integrasi backend (Django Channels / Modbus RTU bridge):
+ *    NoodleHMI.update({stirrers:{...}, conveyors:{...}})  // push state
+ *    NoodleHMI.setStirrer(id, patch)
+ *    NoodleHMI.setConveyor(ingId, patch)
+ *    NoodleHMI.startBatch(id [, recipeKey])
+ *    NoodleHMI.dispense(stirId, ingId, {amount})          // animasi feed
+ *    NoodleHMI.alarm({level,source,msg})
+ *    NoodleHMI.setAuto(false)                              // matikan simulasi
+ *    NoodleHMI.getState()
+ *
+ *  Contoh WebSocket:
+ *    const ws=new WebSocket('wss://vps/ws/noodle/');
+ *    ws.onmessage=e=>NoodleHMI.update(JSON.parse(e.data));
+ *
+ *  Saran peta tag Modbus (per stirrer S1..S3):
+ *    HR  state(enum) | temp(x10) | setTemp | rpm | timer_s | progress
+ *    CO  start | stop | hold | estop
+ *  Per conveyor C_MIE..C_TOP3:  running(DO) | speed% | target(1..3)
+ * ================================================================== */
+(()=>{
+'use strict';
+const $=s=>document.querySelector(s);
+const NS='http://www.w3.org/2000/svg';
+function E(tag,a,parent){const e=document.createElementNS(NS,tag);for(const k in a)e.setAttribute(k,a[k]);if(parent)parent.appendChild(e);return e;}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rnd=(a,b)=>a+Math.random()*(b-a);
+
+/* ---------- config ---------- */
+const ING=[
+  {id:'sauce', name:'Sauce',     cssv:'--sauce', unit:'ml', hex:'#d6453e'},
+  {id:'top1',  name:'Topping 1', cssv:'--top1',  unit:'g',  hex:'#54b85c'},
+  {id:'top2',  name:'Topping 2', cssv:'--top2',  unit:'g',  hex:'#e8843a'},
+];
+const ingIx = Object.fromEntries(ING.map((g,i)=>[g.id,i]));
+const ingOf = Object.fromEntries(ING.map(g=>[g.id,g]));
+
+const RECIPES={
+  original:{name:'Mie Goreng Original', cook:22, items:{sauce:40,top1:60,top2:45}},
+  pedas:   {name:'Mie Goreng Pedas',    cook:24, items:{sauce:55,top1:35,top2:60}},
+  seafood: {name:'Mie Goreng Seafood',  cook:26, items:{sauce:45,top1:30,top2:0}},
+  sayur:   {name:'Mie Goreng Sayur',    cook:20, items:{sauce:35,top1:90,top2:30}},
+};
+const RECIPE_KEYS=Object.keys(RECIPES);
+
+/* geometry (user units, viewBox 1300x790) */
+const VBW=1300,VBH=790;
+const BELT={x0:172,x1:1086,tread:22,thick:16};
+const CT=120;                                  // chute top
+const beltY = i => 156 + i*82;                 // 156,238,320  (3 lane)
+const STIR = [{id:1,cx:470},{id:2,cx:884}];
+const cxOf = id => STIR[id-1].cx;
+const MOUTH_Y=556, MOUTH_RX=94, MOUTH_RY=29;
+const BELT_SPEED=240;                          // u/s particle ride
+
+/* ---------- state ---------- */
+const state={
+  line:'RUN', estop:false, auto:true, output:0,
+  stirrers:{}, conveyors:{}, alarms:[], alarmId:0,
+};
+STIR.forEach(s=>{
+  state.stirrers[s.id]={
+    id:s.id, state:'IDLE', recipeKey: RECIPE_KEYS[(s.id-1)%RECIPE_KEYS.length],
+    temp:31, setTemp:225, rpm:0, setRpm:42+s.id*4, timer:0, cookTotal:0,
+    batch:0, progress:0, hold:false, ctl:{abort:false}, doneItems:{},
+  };
+});
+ING.forEach(g=>state.conveyors[g.id]={running:false,speed:0,target:null});
+
+/* ================================================================
+ *  BUILD MIMIC
+ * ================================================================ */
+const refs={belt:{},beltTread:{},gate:{},hopper:{},drum:{},paddle:{},glow:{},steam:{},ring:{},mini:{}};
+let layerParticles;
+
+function buildMimic(){
+  const host=$('#mimicHost');
+  const svg=E('svg',{viewBox:`0 0 ${VBW} ${VBH}`,role:'img','aria-label':'Mimic lini masak mie goreng'});
+  host.appendChild(svg);
+
+  // defs
+  const defs=E('defs',{},svg);
+  defs.innerHTML=`
+    <linearGradient id="steel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#b9c4cd"/><stop offset=".5" stop-color="#7d8a93"/><stop offset="1" stop-color="#525e67"/>
+    </linearGradient>
+    <linearGradient id="steel2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8d99a3"/><stop offset="1" stop-color="#3f4a53"/>
+    </linearGradient>
+    <radialGradient id="bowl" cx="50%" cy="34%" r="75%">
+      <stop offset="0" stop-color="#1b2730"/><stop offset="1" stop-color="#070b0e"/>
+    </radialGradient>
+    <radialGradient id="heat" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ff8a3d"/><stop offset=".5" stop-color="#ff5a1f" stop-opacity=".5"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="soft"><feGaussianBlur stdDeviation="3"/></filter>`;
+
+  // section labels
+  const lbl=(x,y,t)=>{const e=E('text',{x,y,fill:'#56697a','font-size':12,'letter-spacing':'4','font-family':'IBM Plex Mono'},svg);e.textContent=t;};
+  lbl(20,28,'BAHAN BAKU');
+  lbl(560,28,'CONVEYOR  ·  ROUTING KE STIRRER');
+  lbl(20,478,'COOKING STIRRER');
+
+  // vertical chute columns (behind belts) at each stirrer x
+  STIR.forEach(s=>{
+    E('rect',{x:s.cx-30,y:CT,width:60,height:MOUTH_Y-CT-2,rx:8,fill:'#0d161d',stroke:'#1d2a33','stroke-width':1,opacity:.9},svg);
+    E('rect',{x:s.cx-30,y:CT,width:60,height:MOUTH_Y-CT-2,rx:8,fill:'none',stroke:'#27c6ff','stroke-width':1,opacity:.0,id:`chute-${s.id}`},svg);
+    // funnel
+    E('path',{d:`M${s.cx-30},${MOUTH_Y-58} L${s.cx+30},${MOUTH_Y-58} L${s.cx+MOUTH_RX-14},${MOUTH_Y-6} L${s.cx-MOUTH_RX+14},${MOUTH_Y-6} Z`,fill:'#0d161d',stroke:'#1d2a33','stroke-width':1},svg);
+    const cap=E('text',{x:s.cx,y:CT-12,fill:'#7e93a3','font-size':12,'text-anchor':'middle','font-family':'Chakra Petch','font-weight':600,'letter-spacing':'1'},svg);
+    cap.textContent='STIRRER '+s.id;
+  });
+
+  // belts + hoppers
+  ING.forEach((g,i)=>{
+    const y=beltY(i), col=g.hex;
+    // hopper
+    const hg=E('g',{},svg);
+    E('path',{d:`M34,${y-22} L150,${y-22} L138,${y+10} L46,${y+10} Z`,fill:'url(#steel2)',stroke:'#222f38','stroke-width':1},hg);
+    const lvl=E('rect',{x:48,y:y-18,width:88,height:24,rx:2,fill:col,opacity:.85},hg); refs.hopper[g.id]=lvl;
+    E('path',{d:`M34,${y-22} L150,${y-22} L138,${y+10} L46,${y+10} Z`,fill:'none',stroke:'#0a0f13','stroke-width':1.5,opacity:.4},hg);
+    const nm=E('text',{x:92,y:y-26,fill:'#aebac4','font-size':11,'text-anchor':'middle','font-family':'Chakra Petch','font-weight':600},hg);
+    nm.textContent=g.name.toUpperCase();
+    // feeder outlet
+    E('path',{d:`M84,${y+10} L100,${y+10} L96,${y+22} L88,${y+22} Z`,fill:'url(#steel2)',stroke:'#222f38','stroke-width':1},hg);
+
+    // belt body
+    E('rect',{x:BELT.x0,y:y-BELT.thick/2,width:BELT.x1-BELT.x0,height:BELT.thick,rx:BELT.thick/2,fill:'#11181e',stroke:'#27343d','stroke-width':1},svg);
+    // rollers
+    E('circle',{cx:BELT.x0+2,cy:y,r:BELT.thick/2+2,fill:'url(#steel)',stroke:'#222f38','stroke-width':1},svg);
+    E('circle',{cx:BELT.x1-2,cy:y,r:BELT.thick/2+2,fill:'url(#steel)',stroke:'#222f38','stroke-width':1},svg);
+    // tread group (animated via rAF translate)
+    const tg=E('g',{},svg);
+    const clip=E('clipPath',{id:`bc${i}`},defs);
+    E('rect',{x:BELT.x0,y:y-BELT.thick/2,width:BELT.x1-BELT.x0,height:BELT.thick,rx:BELT.thick/2},clip);
+    tg.setAttribute('clip-path',`url(#bc${i})`);
+    for(let x=BELT.x0-BELT.tread; x<BELT.x1+BELT.tread; x+=BELT.tread){
+      E('line',{x1:x,y1:y-BELT.thick/2,x2:x-7,y2:y+BELT.thick/2,stroke:'#2c3d49','stroke-width':2},tg);
+    }
+    refs.beltTread[g.id]={g:tg,off:0};
+
+    // gates at each stirrer column
+    STIR.forEach(s=>{
+      const gx=s.cx;
+      const gate=E('path',{d:`M${gx-9},${y+9} L${gx+9},${y+9} L${gx},${y+20} Z`,fill:'#1a2730',stroke:'#27343d','stroke-width':1,id:`gate-${g.id}-${s.id}`},svg);
+      refs.gate[`${g.id}-${s.id}`]=gate;
+    });
+    // lane tag
+    const lt=E('text',{x:BELT.x1+10,y:y+4,fill:'#52646f','font-size':9.5,'font-family':'IBM Plex Mono'},svg);
+    lt.textContent='C-'+g.id.toUpperCase();
+  });
+
+  // particle layer (above belts/chutes, below drums front rim)
+  layerParticles=E('g',{id:'particles'},svg);
+
+  // stirrers
+  STIR.forEach(s=>drawStirrer(svg,s));
+}
+
+function drawStirrer(svg,s){
+  const cx=s.cx, g=E('g',{},svg);
+  // legs
+  E('path',{d:`M${cx-58},${MOUTH_Y+96} L${cx-86},${MOUTH_Y+196} L${cx-66},${MOUTH_Y+196} L${cx-44},${MOUTH_Y+100} Z`,fill:'url(#steel2)',stroke:'#1c2730','stroke-width':1},g);
+  E('path',{d:`M${cx+58},${MOUTH_Y+96} L${cx+86},${MOUTH_Y+196} L${cx+66},${MOUTH_Y+196} L${cx+44},${MOUTH_Y+100} Z`,fill:'url(#steel2)',stroke:'#1c2730','stroke-width':1},g);
+  E('rect',{x:cx-90,y:MOUTH_Y+196,width:24,height:14,rx:3,fill:'#0e151a',stroke:'#202c34'},g);
+  E('rect',{x:cx+66,y:MOUTH_Y+196,width:24,height:14,rx:3,fill:'#0e151a',stroke:'#202c34'},g);
+
+  // heat glow under bowl
+  const glow=E('ellipse',{cx:cx,cy:MOUTH_Y+104,rx:96,ry:34,fill:'url(#heat)',opacity:0},g); refs.glow[s.id]=glow;
+
+  // base housing
+  E('path',{d:`M${cx-104},${MOUTH_Y+40} L${cx+104},${MOUTH_Y+40} L${cx+92},${MOUTH_Y+104} L${cx-92},${MOUTH_Y+104} Z`,fill:'url(#steel)',stroke:'#222f38','stroke-width':1.5},g);
+  // control box on side
+  E('rect',{x:cx-128,y:MOUTH_Y+44,width:30,height:56,rx:5,fill:'url(#steel2)',stroke:'#222f38'},g);
+  E('rect',{x:cx-124,y:MOUTH_Y+50,width:22,height:12,rx:2,fill:'#0a1418',stroke:'#27343d'},g);
+  const mt=E('text',{x:cx-113,y:MOUTH_Y+59,fill:'#ff7a45','font-size':8,'text-anchor':'middle','font-family':'IBM Plex Mono'},g);
+  refs.mini[s.id]=mt; mt.textContent='--';
+  E('circle',{cx:cx-119,cy:MOUTH_Y+74,r:4,fill:'url(#steel)',stroke:'#222'},g);
+  E('circle',{cx:cx-107,cy:MOUTH_Y+74,r:4,fill:'url(#steel)',stroke:'#222'},g);
+
+  // bowl body (slightly tapered cylinder)
+  E('path',{d:`M${cx-MOUTH_RX},${MOUTH_Y} L${cx-MOUTH_RX+14},${MOUTH_Y+74} Q${cx},${MOUTH_Y+96} ${cx+MOUTH_RX-14},${MOUTH_Y+74} L${cx+MOUTH_RX},${MOUTH_Y} Z`,fill:'url(#steel)',stroke:'#222f38','stroke-width':1.5},g);
+  // mouth ring
+  E('ellipse',{cx:cx,cy:MOUTH_Y,rx:MOUTH_RX,ry:MOUTH_RY,fill:'url(#steel)',stroke:'#9aa6af','stroke-width':2},g);
+  E('ellipse',{cx:cx,cy:MOUTH_Y,rx:MOUTH_RX-9,ry:MOUTH_RY-6,fill:'url(#bowl)'},g);
+
+  // rotating contents (paddle + noodle swirl)
+  const pg=E('g',{},svg); refs.paddle[s.id]={g:pg,cx:cx,cy:MOUTH_Y,ang:0};
+  const cy=MOUTH_Y;
+  for(let k=0;k<3;k++){
+    const a=k*120;
+    E('path',{d:`M${cx},${cy} q ${22*Math.cos((a)*Math.PI/180)} ${10*Math.sin((a)*Math.PI/180)} ${48*Math.cos((a+18)*Math.PI/180)} ${20*Math.sin((a+18)*Math.PI/180)}`,
+      fill:'none',stroke:'#e8b94a','stroke-width':3,'stroke-linecap':'round',opacity:.55},pg);
+  }
+  // paddle blade
+  E('rect',{x:cx-3,y:cy-MOUTH_RY+5,width:6,height:2*MOUTH_RY-10,rx:3,fill:'#cfd8df',opacity:.85},pg);
+  E('circle',{cx:cx,cy:cy,r:5,fill:'#9aa6af'},pg);
+
+  // status ring around mouth
+  const ring=E('ellipse',{cx:cx,cy:MOUTH_Y,rx:MOUTH_RX+5,ry:MOUTH_RY+4,fill:'none',stroke:'var(--idle)','stroke-width':2.5,opacity:.9},g);
+  refs.ring[s.id]=ring;
+
+  // steam
+  const steam=E('g',{opacity:0},svg); refs.steam[s.id]=steam;
+  for(let k=0;k<4;k++){
+    const sx=cx-30+k*20;
+    E('path',{d:`M${sx},${MOUTH_Y-8} q -8,-18 0,-34 q 8,-16 0,-32`,fill:'none',stroke:'#cdd6dd','stroke-width':3,'stroke-linecap':'round',opacity:.5,filter:'url(#soft)',
+      style:`animation:steam${k%2} ${2.4+k*0.3}s ease-in-out infinite`},steam);
+  }
+  // tomato handle nod to the photo :)
+  E('circle',{cx:cx+MOUTH_RX+10,cy:MOUTH_Y-2,r:6,fill:'#e0463c'},g);
+}
+
+/* steam keyframes injected */
+const sk=document.createElement('style');
+sk.textContent=`@keyframes steam0{0%{opacity:.0;transform:translateY(6px)}40%{opacity:.5}100%{opacity:0;transform:translateY(-20px)}}
+@keyframes steam1{0%{opacity:.0;transform:translateY(10px)}45%{opacity:.45}100%{opacity:0;transform:translateY(-24px)}}`;
+document.head.appendChild(sk);
+
+/* ================================================================
+ *  PARTICLES + rAF LOOP
+ * ================================================================ */
+const particles=[];
+function spawnParticle(ingId,stirId){
+  if(particles.length>140) return;
+  const i=ingIx[ingId], y0=beltY(i), cx=cxOf(stirId), hex=ingOf[ingId].hex;
+  const el=E('circle',{cx:BELT.x0+6,cy:y0-2,r:rnd(3.6,5.2),fill:hex,opacity:.95},layerParticles);
+  particles.push({el,x:BELT.x0+6,y0:y0-2,x1:cx,dropY:MOUTH_Y-4,phase:1,t:0,
+    durR:Math.abs(cx-BELT.x0)/BELT_SPEED*1000, durD:rnd(360,480), r0:+el.getAttribute('r')});
+}
+function updateParticle(p,dt){
+  p.t+=dt;
+  if(p.phase===1){
+    const k=Math.min(1,p.t/p.durR);
+    p.el.setAttribute('cx', BELT.x0+6+(p.x1-(BELT.x0+6))*k);
+    if(k>=1){p.phase=2;p.t=0;}
+  } else {
+    const k=Math.min(1,p.t/p.durD);
+    p.el.setAttribute('cy', p.y0+(p.dropY-p.y0)*k);
+    p.el.setAttribute('r', p.r0*(1-0.65*k));
+    p.el.setAttribute('opacity', 0.95-0.9*k);
+    if(k>=1) p.dead=true;
+  }
+}
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(60, now-last); last=now;
+  // belts
+  for(const id in refs.beltTread){
+    const b=refs.beltTread[id], cv=state.conveyors[id];
+    if(cv.running){ b.off=(b.off - (cv.speed/100*90)*dt/1000) % BELT.tread; b.g.setAttribute('transform',`translate(${b.off},0)`);}
+  }
+  // drums
+  for(const id in refs.paddle){
+    const d=refs.paddle[id], st=state.stirrers[id];
+    if(st.rpm>0){ d.ang=(d.ang + st.rpm*6*dt/1000)%360; d.g.setAttribute('transform',`rotate(${d.ang} ${d.cx} ${d.cy})`);}
+  }
+  // particles
+  for(let i=particles.length-1;i>=0;i--){ updateParticle(particles[i],dt); if(particles[i].dead){particles[i].el.remove();particles.splice(i,1);} }
+  requestAnimationFrame(loop);
+}
+
+/* ================================================================
+ *  CONTROL CARDS + CONVEYOR STRIP  (HTML)
+ * ================================================================ */
+function buildCards(){
+  const host=$('#stirrerCards'); host.innerHTML='';
+  STIR.forEach(s=>{
+    const c=document.createElement('div'); c.className='scard'; c.id='scard-'+s.id; c.dataset.state='IDLE';
+    c.innerHTML=`
+      <div class="hd">
+        <div class="n">STIRRER ${s.id}</div>
+        <div class="batch">Batch <b id="bn-${s.id}">#0</b></div>
+        <div class="pill" id="pill-${s.id}" data-s="IDLE">IDLE</div>
+      </div>
+      <div class="readouts">
+        <div class="ro temp"><div class="k">Suhu</div><div class="v"><span id="tp-${s.id}">31</span><small>°C</small></div></div>
+        <div class="ro"><div class="k">Putaran</div><div class="v"><span id="rpm-${s.id}">0</span><small> rpm</small></div></div>
+        <div class="ro"><div class="k">Timer</div><div class="v" id="tm-${s.id}">00:00</div></div>
+      </div>
+      <div class="prog"><i id="pg-${s.id}"></i></div>
+      <div class="recipe">
+        <div class="rh">Resep
+          <select id="rs-${s.id}">${RECIPE_KEYS.map(k=>`<option value="${k}">${RECIPES[k].name}</option>`).join('')}</select>
+        </div>
+        <div class="ings" id="ig-${s.id}"></div>
+      </div>
+      <div class="actions">
+        <button class="btn start" id="st-${s.id}">▶ Mulai</button>
+        <button class="btn stop"  id="sp-${s.id}">■ Stop</button>
+        <button class="btn hold"  id="hd-${s.id}">⏸ Hold</button>
+      </div>`;
+    host.appendChild(c);
+    const st=state.stirrers[s.id];
+    $('#rs-'+s.id).value=st.recipeKey;
+    $('#rs-'+s.id).addEventListener('change',e=>{st.recipeKey=e.target.value; renderRecipe(s.id);});
+    $('#st-'+s.id).addEventListener('click',()=>startBatch(s.id));
+    $('#sp-'+s.id).addEventListener('click',()=>stopStirrer(s.id));
+    $('#hd-'+s.id).addEventListener('click',()=>toggleHold(s.id));
+    renderRecipe(s.id);
+  });
+}
+function renderRecipe(id){
+  const st=state.stirrers[id], rec=RECIPES[st.recipeKey], host=$('#ig-'+id);
+  host.innerHTML=ING.map(g=>{
+    const amt=rec.items[g.id]||0; const skip=amt<=0;
+    const done=st.doneItems[g.id]?'done':'';
+    return `<span class="ing ${skip?'skip':''} ${done}" data-ing="${g.id}-${id}"><b style="background:${g.hex}"></b>${g.name} <span style="color:var(--faint)">${skip?'—':amt+g.unit}</span></span>`;
+  }).join('');
+}
+
+function buildConveyors(){
+  const host=$('#cvGrid'); host.innerHTML='';
+  ING.forEach(g=>{
+    const d=document.createElement('div'); d.className='cv'; d.id='cv-'+g.id;
+    d.innerHTML=`
+      <div class="top"><span class="swatch" style="background:${g.hex}"></span><span class="nm">${g.name}</span><span class="id">C-${g.id.toUpperCase()}</span></div>
+      <div class="mid"><span class="belt"><i></i></span><span id="cvspd-${g.id}">0%</span></div>
+      <div class="bot">
+        <span class="st"><b></b><span id="cvst-${g.id}">STANDBY</span></span>
+        <span class="tgt">→ <span id="cvtg-${g.id}">—</span></span>
+      </div>`;
+    host.appendChild(d);
+  });
+}
+
+/* ================================================================
+ *  RENDER (state -> UI), throttled 250ms
+ * ================================================================ */
+const AMBIENT=31;
+function tick(){
+  // passive temp drift for non-cooking stirrers
+  for(const id in state.stirrers){
+    const st=state.stirrers[id];
+    if(st.state!=='COOKING' && st.temp>AMBIENT) st.temp=Math.max(AMBIENT, st.temp-1.4);
+  }
+  render();
+}
+function fmt(t){const m=Math.floor(t/60),s=Math.floor(t%60);return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');}
+
+function render(){
+  // header
+  const active=Object.values(state.stirrers).filter(s=>s.state==='DISPENSING'||s.state==='COOKING'||s.state==='HOLD').length;
+  $('#hActive').innerHTML=active+'<small>/2</small>';
+  $('#hOut').innerHTML=state.output+'<small> porsi</small>';
+  const al=state.alarms.filter(a=>!a.ack).length;
+  const ha=$('#hAlarm'); ha.textContent=al; ha.style.color=al?'var(--warn)':'var(--run)';
+  const lp=$('#linePill'); lp.className='linepill is-'+state.line;
+  $('#lineTxt').textContent=state.line==='RUN'?'LINE RUNNING':state.line==='STOP'?'LINE STOPPED':'EMERGENCY STOP';
+  $('#mimicTag').textContent=state.auto?'SIM ▸ AUTO':'MANUAL';
+
+  // stirrers
+  for(const id in state.stirrers){
+    const st=state.stirrers[id];
+    const card=$('#scard-'+id); card.dataset.state=st.state;
+    const pill=$('#pill-'+id); pill.dataset.s=st.state; pill.textContent=st.hold&&st.state==='COOKING'?'HOLD':st.state;
+    $('#bn-'+id).textContent='#'+st.batch;
+    $('#tp-'+id).textContent=Math.round(st.temp);
+    $('#rpm-'+id).textContent=Math.round(st.rpm);
+    $('#tm-'+id).textContent=fmt(st.timer);
+    $('#pg-'+id).style.width=Math.round(st.progress*100)+'%';
+    card.querySelector('.ro.temp').classList.toggle('cooking-off', st.state!=='COOKING');
+    // ingredient chips
+    const rec=RECIPES[st.recipeKey];
+    card.querySelectorAll('.ing').forEach(ch=>{
+      const ig=ch.dataset.ing.split('-')[0]; const amt=rec.items[ig]||0;
+      ch.classList.toggle('done', !!st.doneItems[ig] && amt>0);
+      ch.classList.toggle('active', state.conveyors[ig].running && state.conveyors[ig].target==+id);
+    });
+    $('#st-'+id).disabled = !(st.state==='IDLE') || state.estop;
+    $('#hd-'+id).classList.toggle('on', st.hold);
+    // mimic visuals
+    const ring=refs.ring[id], glow=refs.glow[id], steam=refs.steam[id], mini=refs.mini[id];
+    const col={IDLE:'var(--idle)',DISPENSING:'var(--route)',COOKING:'var(--cook)',DONE:'var(--done)'}[st.state]||'var(--idle)';
+    ring.setAttribute('stroke',col);
+    glow.setAttribute('opacity', st.state==='COOKING'?clamp((st.temp-60)/200,0,.9):0);
+    steam.setAttribute('opacity', st.state==='COOKING'?1:0);
+    mini.textContent = st.state==='COOKING'?Math.round(st.temp)+'°':(st.state==='DISPENSING'?'··':'--');
+    mini.setAttribute('fill', st.state==='COOKING'?'#ff7a45':'#46c6ff');
+  }
+
+  // conveyors
+  for(const g of ING){
+    const cv=state.conveyors[g.id], el=$('#cv-'+g.id);
+    el.classList.toggle('run', cv.running);
+    $('#cvspd-'+g.id).textContent=Math.round(cv.speed)+'%';
+    $('#cvst-'+g.id).textContent=cv.running?'FEEDING':'STANDBY';
+    $('#cvtg-'+g.id).textContent=cv.target?('S'+cv.target):'—';
+    // gate highlight in mimic
+    STIR.forEach(s=>{
+      const gate=refs.gate[`${g.id}-${s.id}`];
+      const on=cv.running && cv.target===s.id;
+      gate.setAttribute('fill', on?g.hex:'#1a2730');
+    });
+    const ch=$('#chute-'+(cv.target||0)); // glow target chute lightly handled per-stirrer below
+  }
+  // chute glow per stirrer (any feeding to it)
+  STIR.forEach(s=>{
+    const feeding=ING.some(g=>state.conveyors[g.id].running && state.conveyors[g.id].target===s.id);
+    const ch=$('#chute-'+s.id); if(ch) ch.setAttribute('opacity', feeding?0.6:0);
+  });
+}
+
+/* ================================================================
+ *  PROCESS SEQUENCE
+ * ================================================================ */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const aborted=id=>state.estop||state.line==='STOP'||state.stirrers[id].ctl.abort;
+
+async function startBatch(id, recipeKey){
+  const st=state.stirrers[id];
+  if(st.state!=='IDLE'||state.estop) return;
+  if(recipeKey&&RECIPES[recipeKey]) st.recipeKey=recipeKey, $('#rs-'+id).value=recipeKey;
+  st.ctl.abort=false; st.hold=false; st.doneItems={}; st.batch++; st.state='DISPENSING'; st.progress=0;
+  renderRecipe(id);
+  const rec=RECIPES[st.recipeKey];
+  log('info','STIRRER '+id,`Batch <b>#${st.batch}</b> · ${rec.name} — mulai dispensing`);
+
+  const items=ING.filter(g=>(rec.items[g.id]||0)>0);
+  let done=0;
+  for(const g of items){
+    if(aborted(id)) return cleanup(id);
+    await dispense(id,g.id,{amount:rec.items[g.id]});
+    st.doneItems[g.id]=true; done++; st.progress=0.42*(done/items.length);
+  }
+  if(aborted(id)) return cleanup(id);
+
+  // cooking
+  st.state='COOKING'; st.rpm=st.setRpm; st.cookTotal=rec.cook; st.timer=rec.cook;
+  log('info','STIRRER '+id,`Memasak — ${st.setRpm} rpm · target ${st.setTemp}°C · ${rec.cook}s`);
+  await cook(id);
+  if(aborted(id)) return cleanup(id);
+
+  st.state='DONE'; st.rpm=0; st.progress=1; state.output++;
+  log('ok','STIRRER '+id,`Batch <b>#${st.batch}</b> selesai — porsi dikeluarkan`);
+  await sleep(2600);
+  st.state='IDLE'; st.progress=0; st.doneItems={}; renderRecipe(id);
+}
+
+async function dispense(id,ingId,opts={}){
+  const cv=state.conveyors[ingId], amt=opts.amount||rnd(20,80), g=ingOf[ingId];
+  cv.running=true; cv.target=id; cv.speed=clamp(58+amt/4+rnd(-6,10),45,100);
+  log('info','C-'+ingId.toUpperCase(),`Antar ${g.name} ${amt}${g.unit} → Stirrer ${id}`);
+  const N=clamp(Math.round(amt/14),4,9);
+  for(let k=0;k<N;k++){ if(aborted(id))break; spawnParticle(ingId,id); await sleep(900/N); }
+  await sleep(700);
+  cv.running=false; cv.target=null; cv.speed=0;
+}
+
+function cook(id){
+  return new Promise(res=>{
+    const st=state.stirrers[id];
+    const iv=setInterval(()=>{
+      if(aborted(id)){clearInterval(iv);res();return;}
+      if(st.hold) return;
+      st.timer=Math.max(0,st.timer-1);
+      st.temp=Math.min(st.setTemp, st.temp + (st.setTemp-st.temp)*0.16 + 5);
+      st.progress=0.42 + 0.58*(1-st.timer/st.cookTotal);
+      if(st.timer<=0){clearInterval(iv);res();}
+    },1000);
+  });
+}
+
+function cleanup(id){
+  const st=state.stirrers[id];
+  st.state='IDLE'; st.rpm=0; st.timer=0; st.progress=0; st.hold=false; st.doneItems={};
+  ING.forEach(g=>{const cv=state.conveyors[g.id]; if(cv.target===+id||cv.target===id){cv.running=false;cv.target=null;cv.speed=0;}});
+  renderRecipe(id);
+}
+function stopStirrer(id){
+  const st=state.stirrers[id];
+  if(st.state==='IDLE')return;
+  st.ctl.abort=true;
+  log('warn','STIRRER '+id,`Stop manual — batch #${st.batch} dibatalkan`);
+}
+function toggleHold(id){
+  const st=state.stirrers[id];
+  if(st.state!=='COOKING'){return;}
+  st.hold=!st.hold;
+  log(st.hold?'warn':'info','STIRRER '+id, st.hold?'Masak di-HOLD':'Masak dilanjutkan');
+}
+
+/* ================================================================
+ *  ALARM / LOG
+ * ================================================================ */
+function log(level,source,msg){
+  const t=new Date(); const id=++state.alarmId;
+  state.alarms.unshift({id,level,source,msg,t,ack:level==='info'||level==='ok'});
+  if(state.alarms.length>120) state.alarms.pop();
+  renderLog();
+}
+function renderLog(){
+  const host=$('#log');
+  host.innerHTML=state.alarms.slice(0,60).map(a=>{
+    const t=a.t.toLocaleTimeString('id-ID',{hour12:false});
+    return `<div class="row"><span class="t">${t}</span><span class="lv ${a.level}"></span><span class="msg"><b>${a.source}</b> — ${a.msg}</span></div>`;
+  }).join('');
+}
+
+/* ================================================================
+ *  E-STOP / LINE
+ * ================================================================ */
+function estop(){
+  state.estop=!state.estop;
+  if(state.estop){
+    state.line='ESTOP';
+    for(const id in state.stirrers){state.stirrers[id].ctl.abort=true;}
+    ING.forEach(g=>{const cv=state.conveyors[g.id];cv.running=false;cv.target=null;cv.speed=0;});
+    log('fault','SAFETY','EMERGENCY STOP ditekan — semua aktuator dihentikan');
+    $('#estopBtn').textContent='⟲ Reset';
+  } else {
+    state.line=state.auto?'RUN':'STOP';
+    for(const id in state.stirrers){state.stirrers[id].ctl.abort=false; state.stirrers[id].state='IDLE'; state.stirrers[id].rpm=0;}
+    log('ok','SAFETY','E-STOP di-reset — line siap');
+    $('#estopBtn').textContent='⏻ E-STOP';
+  }
+  render();
+}
+
+/* ================================================================
+ *  SIM ENGINE
+ * ================================================================ */
+let simTimer;
+function simStep(){
+  if(!state.auto||state.estop){return;}
+  const idle=STIR.map(s=>s.id).filter(id=>state.stirrers[id].state==='IDLE');
+  if(idle.length){
+    const id=idle[Math.floor(Math.random()*idle.length)];
+    state.stirrers[id].recipeKey=RECIPE_KEYS[Math.floor(Math.random()*RECIPE_KEYS.length)];
+    $('#rs-'+id).value=state.stirrers[id].recipeKey;
+    startBatch(id);
+  }
+}
+function setAuto(on){
+  state.auto=!!on;
+  state.line=state.estop?'ESTOP':(on?'RUN':'STOP');
+  $('#simBtn').classList.toggle('on',on);
+  $('#simBtn').textContent=on?'AUTO ▸ ON':'AUTO ▸ OFF';
+  log(on?'info':'warn','MODE', on?'Mode AUTO (simulasi) aktif':'Mode MANUAL — start batch dari kartu stirrer');
+  render();
+}
+
+/* ================================================================
+ *  PUBLIC API (untuk backend nyata)
+ * ================================================================ */
+window.NoodleHMI={
+  getState:()=>JSON.parse(JSON.stringify(state)),
+  setStirrer(id,patch){Object.assign(state.stirrers[id],patch);render();},
+  setConveyor(ingId,patch){Object.assign(state.conveyors[ingId],patch);render();},
+  update(payload={}){
+    if(payload.line)state.line=payload.line;
+    if(payload.stirrers)for(const id in payload.stirrers)Object.assign(state.stirrers[id],payload.stirrers[id]);
+    if(payload.conveyors)for(const c in payload.conveyors)Object.assign(state.conveyors[c],payload.conveyors[c]);
+    render();
+  },
+  startBatch:(id,rk)=>startBatch(id,rk),
+  stop:id=>stopStirrer(id),
+  dispense:(stirId,ingId,opts)=>dispense(stirId,ingId,opts),
+  alarm:({level='info',source='EXT',msg=''}={})=>log(level,source,msg),
+  setAuto, estop,
+};
+
+/* ================================================================
+ *  BOOT
+ * ================================================================ */
+buildMimic(); buildCards(); buildConveyors();
+log('ok','SYSTEM','NoodleFlow HMI online — 2 stirrer · 3 conveyor terdeteksi');
+render(); renderLog();
+requestAnimationFrame(loop);
+setInterval(tick,250);
+setInterval(()=>{$('#clock').textContent=new Date().toLocaleTimeString('id-ID',{hour12:false})+' '+new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'short'});},1000);
+
+$('#estopBtn').addEventListener('click',estop);
+$('#simBtn').addEventListener('click',()=>setAuto(!state.auto));
+$('#ackBtn').addEventListener('click',()=>{state.alarms.forEach(a=>a.ack=true);renderLog();render();});
+
+// start simulation cadence
+simTimer=setInterval(simStep,3500);
+setTimeout(simStep,600);
+})();
+</script>
+</body>
+</html>

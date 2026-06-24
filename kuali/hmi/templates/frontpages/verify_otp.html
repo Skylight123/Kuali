@@ -1,0 +1,26 @@
+{% load static %}
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Kuali - Verify OTP</title>
+    <link rel="stylesheet" href="{% static 'hmi/css/frontpages/auth.css' %}">
+</head>
+<body>
+<main class="auth-page single">
+    <section class="auth-card compact-card">
+        <div class="brand-row compact"><div class="brand-mark" aria-hidden="true"><span>K</span></div><div><strong>Kuali</strong><small>otp verification</small></div></div>
+        <h2>Verify OTP</h2>
+        <p class="auth-subtitle">Masukkan kode 6 digit untuk {{ email }}.</p>
+        {% include 'frontpages/partials/auth_messages.html' %}
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            {% include 'frontpages/partials/form_field.html' with field=form.otp icon='shield' %}
+            <button class="primary-btn" type="submit">Verifikasi kode</button>
+        </form>
+        <p class="auth-footer"><a href="{% url 'login' %}">Kembali ke login</a></p>
+    </section>
+</main>
+</body>
+</html>

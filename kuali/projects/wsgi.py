@@ -1,5 +1,5 @@
 """
-WSGI config for zenithkitchen_hmi project.
+WSGI config for Kuali project.
 
 It exposes the WSGI callable as a module-level variable named ``application``.
 

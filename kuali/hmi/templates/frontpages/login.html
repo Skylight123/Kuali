@@ -1,0 +1,53 @@
+{% load static %}
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Kuali - Login</title>
+    <link rel="stylesheet" href="{% static 'hmi/css/frontpages/auth.css' %}">
+</head>
+<body>
+<main class="auth-page">
+    <section class="auth-panel">
+        <div class="brand-row">
+            <div class="brand-mark" aria-hidden="true"><span>K</span></div>
+            <div><strong>Kuali</strong><small>operator access</small></div>
+        </div>
+        <div class="process-preview" aria-hidden="true">
+            <div class="preview-line"><span></span><i></i><span></span></div>
+            <div class="preview-line second"><span></span><i></i><span></span></div>
+            <div class="preview-cookers"><b></b><b></b></div>
+        </div>
+        <div class="auth-copy">
+            <small>Secure station</small>
+            <h1>Masuk ke ruang kendali masak.</h1>
+            <p>Pantau conveyor, cooker, batch, dan alarm dari dashboard HMI yang sama.</p>
+        </div>
+        <footer>HMI local console / v1.0</footer>
+    </section>
+    <section class="auth-card">
+        <h2>Login operator</h2>
+        <p class="auth-subtitle">Gunakan akun yang sudah diverifikasi OTP.</p>
+        <nav class="tab-row" aria-label="Navigasi auth">
+            <a class="tab-btn active" href="{% url 'login' %}">Login</a>
+            <a class="tab-btn" href="{% url 'signup' %}">Signup</a>
+        </nav>
+        {% include 'frontpages/partials/auth_messages.html' %}
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            <input type="hidden" name="next" value="{{ next }}">
+            {% include 'frontpages/partials/form_field.html' with field=form.username icon='user' %}
+            {% include 'frontpages/partials/form_field.html' with field=form.password icon='lock' password_toggle=True %}
+            <div class="auth-extra">
+                <label><input type="checkbox" name="remember"> Ingat sesi</label>
+                <a href="{% url 'forgot_password' %}">Forgot password</a>
+            </div>
+            <button class="primary-btn" type="submit">Login</button>
+        </form>
+        <p class="auth-footer">Belum punya akses? <a href="{% url 'signup' %}">Signup operator</a></p>
+    </section>
+</main>
+<script src="{% static 'hmi/js/frontpages/auth.js' %}"></script>
+</body>
+</html>

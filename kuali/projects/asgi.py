@@ -1,5 +1,5 @@
 """
-ASGI config for zenithkitchen_hmi project.
+ASGI config for Kuali project.
 
 It exposes the ASGI callable as a module-level variable named ``application``.
 

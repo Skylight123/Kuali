@@ -1,4 +1,4 @@
-/* -- ZENITHKITCHEN HMI--
+/* -- KUALI HMI--
  * Created by : Calvin Prasetya L.
  * Released at : 24 Juni 2026
  * updated at : 24 Juni 2026 (home)
@@ -16,15 +16,15 @@
 >> For setting up python Environments :
  1. sudo apt update
  2. sudo apt install python3-venv
- 3. python.exe -m venv .venv
- 4.  .\.venv\Scripts\activate
+ 3. python3 -m venv .venv
+ 4. source .venv/bin/activate
  5. pip install pipenv
  6. pipenv install <package-name>
 
 >> Create new project and app :
- 1. django-admin.exe startproject myproject
+ 1. django-admin startproject myproject
  2. cd myproject
- 3. python.exe manage.py startapp myapp
+ 3. python manage.py startapp myapp
 
 >> Save and install python dependencies :
  1. pip freeze > requirements.txt
@@ -66,7 +66,7 @@
 
 >> How to create a package :
 1. python -m compileall
-2. pyinstaller --onefile --noconsole --noconfirm --name=zenithkitchen \
+2. pyinstaller --onefile --noconsole --noconfirm --name=kuali \
     --add-data "../.env:." \
     --add-data "databases/:databases" \
     --add-data "integrations/:integrations" \
@@ -207,12 +207,12 @@
    =====================================
 */
 >> How to run in pm2:
-1. pm2 start /home/scada03/DJANGO/ZenithKitchen/zenithkitchen/dist/zenithkitchen\
-  --name zenithkitchen 
-2. pm2 start /home/calvin2803/Documents/Django/ZenithKitchen/zenithkitchen/dist/zenithkitchen\
-  --name zenithkitchen 
-3. pm2 start /root/CALVIN_FILES/DJANGO/ZenithKitchen/zenithkitchen/dist/zenithkitchen\
-  --name zenithkitchen 
+1. pm2 start /home/scada03/DJANGO/Kuali/kuali/dist/kuali\
+  --name kuali 
+2. pm2 start /home/calvin2803/Documents/Django/Kuali/kuali/dist/kuali\
+  --name kuali 
+3. pm2 start /root/CALVIN_FILES/DJANGO/Kuali/kuali/dist/kuali\
+  --name kuali 
 
 >> how to set pm2 autostart when booting :
 1. pm2 save

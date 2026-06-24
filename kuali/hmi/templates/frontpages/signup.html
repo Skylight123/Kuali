@@ -1,0 +1,51 @@
+{% load static %}
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Kuali - Signup</title>
+    <link rel="stylesheet" href="{% static 'hmi/css/frontpages/auth.css' %}">
+</head>
+<body>
+<main class="auth-page">
+    <section class="auth-panel">
+        <div class="brand-row">
+            <div class="brand-mark" aria-hidden="true"><span>K</span></div>
+            <div><strong>Kuali</strong><small>new operator</small></div>
+        </div>
+        <div class="process-preview" aria-hidden="true">
+            <div class="preview-line"><span></span><i></i><span></span></div>
+            <div class="preview-line second"><span></span><i></i><span></span></div>
+            <div class="preview-cookers"><b></b><b></b></div>
+        </div>
+        <div class="auth-copy">
+            <small>Account provisioning</small>
+            <h1>Buat akun operator HMI.</h1>
+            <p>Signup hanya untuk user operator. Tidak ada register company di alur HMI ini.</p>
+        </div>
+        <footer>OTP verification required</footer>
+    </section>
+    <section class="auth-card">
+        <h2>Signup</h2>
+        <p class="auth-subtitle">Isi data operator, lalu verifikasi OTP.</p>
+        <nav class="tab-row" aria-label="Navigasi auth">
+            <a class="tab-btn" href="{% url 'login' %}">Login</a>
+            <a class="tab-btn active" href="{% url 'signup' %}">Signup</a>
+        </nav>
+        {% include 'frontpages/partials/auth_messages.html' %}
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            {% include 'frontpages/partials/form_field.html' with field=form.first_name icon='user' %}
+            {% include 'frontpages/partials/form_field.html' with field=form.username icon='user' %}
+            {% include 'frontpages/partials/form_field.html' with field=form.email icon='mail' %}
+            {% include 'frontpages/partials/form_field.html' with field=form.password icon='lock' password_toggle=True %}
+            {% include 'frontpages/partials/form_field.html' with field=form.confirm_password icon='lock' password_toggle=True %}
+            <button class="primary-btn" type="submit">Kirim OTP</button>
+        </form>
+        <p class="auth-footer">Sudah punya akun? <a href="{% url 'login' %}">Login</a></p>
+    </section>
+</main>
+<script src="{% static 'hmi/js/frontpages/auth.js' %}"></script>
+</body>
+</html>

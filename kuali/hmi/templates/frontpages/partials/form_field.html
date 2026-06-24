@@ -1,0 +1,12 @@
+<label class="auth-field">
+    <span class="field-label">{{ field.label }}</span>
+    <span class="field-control">
+        <span class="field-icon" aria-hidden="true" data-icon="{{ icon }}"></span>
+        {{ field }}
+        {% if password_toggle %}
+            <button class="password-toggle" type="button" aria-label="Tampilkan password" data-password-toggle></button>
+        {% endif %}
+    </span>
+    {% if field.help_text %}<small class="field-help">{{ field.help_text }}</small>{% endif %}
+    {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+</label>
