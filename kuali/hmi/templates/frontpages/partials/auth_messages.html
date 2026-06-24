@@ -1,7 +1,10 @@
-{% if messages %}
-    <div class="auth-messages" role="status" aria-live="polite">
-        {% for message in messages %}
-            <div class="auth-message {{ message.tags }}">{{ message }}</div>
-        {% endfor %}
-    </div>
+{% if messages or form.non_field_errors %}
+<div class="msgs" role="status" aria-live="polite">
+    {% for message in messages %}
+    <div class="msg {{ message.tags }}">{{ message }}</div>
+    {% endfor %}
+    {% for error in form.non_field_errors %}
+    <div class="msg error">{{ error }}</div>
+    {% endfor %}
+</div>
 {% endif %}

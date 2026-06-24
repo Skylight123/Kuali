@@ -25,12 +25,19 @@ def user_app_role(user):
 
 
 def username_for_login(identifier):
-    username = (identifier or "").strip()
-    if "@" in username:
-        matched_user = User.objects.filter(email__iexact=username).first()
-        if matched_user:
-            username = matched_user.username
-    return username
+    identifier = (identifier or "").strip()
+    if not identifier:
+        return identifier
+
+    matched_user = User.objects.filter(email__iexact=identifier).only("username").first()
+    if matched_user:
+        return matched_user.username
+
+    matched_user = User.objects.filter(username__iexact=identifier).only("username").first()
+    if matched_user:
+        return matched_user.username
+
+    return identifier
 
 
 def get_user(user_id):

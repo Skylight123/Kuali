@@ -4,23 +4,33 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Kuali - Verify OTP</title>
+    <title>Verifikasi OTP &middot; Kuali</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'hmi/img/favicon.svg' %}">
+    <meta name="theme-color" content="#171210">
     <link rel="stylesheet" href="{% static 'hmi/css/frontpages/auth.css' %}">
 </head>
 <body>
-<main class="auth-page single">
-    <section class="auth-card compact-card">
-        <div class="brand-row compact"><div class="brand-mark" aria-hidden="true"><span>K</span></div><div><strong>Kuali</strong><small>otp verification</small></div></div>
-        <h2>Verify OTP</h2>
-        <p class="auth-subtitle">Masukkan kode 6 digit untuk {{ email }}.</p>
-        {% include 'frontpages/partials/auth_messages.html' %}
-        <form method="post" class="auth-form">
-            {% csrf_token %}
-            {% include 'frontpages/partials/form_field.html' with field=form.otp icon='shield' %}
-            <button class="primary-btn" type="submit">Verifikasi kode</button>
-        </form>
-        <p class="auth-footer"><a href="{% url 'login' %}">Kembali ke login</a></p>
-    </section>
+{% include 'frontpages/partials/auth_background.html' %}
+<main class="card">
+    <div class="top">
+        <div class="logo"><img src="{% static 'hmi/img/kuali-logo.svg' %}" alt="Kuali" width="290" height="103"></div>
+        <div class="tagline">Kitchen Unit - Adaptive Line Intelligence</div>
+        <div class="eye">OTP verification</div>
+        <h1>Verifikasi <em>kode</em></h1>
+        <p>Masukkan kode 6 digit yang dikirim untuk {{ email }}.</p>
+    </div>
+
+    {% include 'frontpages/partials/auth_messages.html' %}
+
+    <form method="post" class="auth-form" data-auth-form novalidate>
+        {% csrf_token %}
+        {% include 'frontpages/partials/form_field.html' with field=form.otp icon='shield' %}
+        <button class="btn" type="submit" data-submit-button data-loading-text="Memverifikasi...">Verifikasi kode</button>
+    </form>
+
+    <div class="foot"><a href="{% url 'login' %}">Kembali ke login</a></div>
+    {% include 'frontpages/partials/auth_kabbr.html' %}
 </main>
+<script src="{% static 'hmi/js/frontpages/auth.js' %}"></script>
 </body>
 </html>

@@ -6,10 +6,46 @@ from databases import emailotpmodels
 from hmi.models import EmailOTP, UserProfile
 
 
-@override_settings(FORCE_SCRIPT_NAME=None, STATIC_URL='/static/', MEDIA_URL='/media/')
+@override_settings(
+    FORCE_SCRIPT_NAME=None,
+    STATIC_URL='/static/',
+    MEDIA_URL='/media/',
+    OTP_EMAIL_METHOD='console',
+)
 class AuthFlowTests(TestCase):
     def setUp(self):
         set_script_prefix('/')
+
+    def test_auth_pages_render_with_login_design(self):
+        response = self.client.get(reverse("signup"))
+        self.assertContains(response, "Daftar akun")
+        self.assertContains(response, "Kitchen Unit - Adaptive Line Intelligence")
+
+        response = self.client.get(reverse("forgot_password"))
+        self.assertContains(response, "Reset")
+        self.assertContains(response, "Kitchen Unit - Adaptive Line Intelligence")
+
+        user = User.objects.create_user(
+            username="render_operator",
+            email="render@example.local",
+            password="TemporaryPass123",
+        )
+        session = self.client.session
+        session["password_reset_user_id"] = user.id
+        session.save()
+
+        response = self.client.get(reverse("change_password"))
+        self.assertContains(response, "Buat sandi")
+        self.assertContains(response, "Kitchen Unit - Adaptive Line Intelligence")
+
+        session = self.client.session
+        session["otp_purpose"] = "signup"
+        session["signup_data"] = {"email": "render@example.local"}
+        session.save()
+
+        response = self.client.get(reverse("verify_otp"))
+        self.assertContains(response, "Verifikasi")
+        self.assertContains(response, "render@example.local")
 
     def test_signup_verify_otp_creates_operator_profile_and_requires_login(self):
         response = self.client.post(reverse("signup"), {
@@ -48,6 +84,23 @@ class AuthFlowTests(TestCase):
 
         self.assertRedirects(response, reverse("hmi"))
         self.assertGreater(self.client.session.get_expiry_age(), 30000000)
+
+    def test_auth_user_username_and_password_reach_dashboard(self):
+        User.objects.create_user(
+            username="KitchenOperator",
+            email="kitchen-operator@example.local",
+            password="TemporaryPass123",
+        )
+
+        response = self.client.post(reverse("login"), {
+            "username": "kitchenoperator",
+            "password": "TemporaryPass123",
+        })
+
+        self.assertRedirects(response, reverse("hmi"))
+        response = self.client.get(reverse("hmi"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "KitchenOperator")
 
     def test_forgot_password_verify_otp_enables_change_password(self):
         user = User.objects.create_user(
