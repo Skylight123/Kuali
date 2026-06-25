@@ -52,6 +52,7 @@
     alarms: [],
     alarmId: 0,
     robotQueue: { rows: [], summary: { received: 0, processing: 0, error: 0 } },
+    broker: { enabled: false, status: 'disabled', messages: [] },
   };
 
   // ── SVG REFS ────────────────────────────────────────────────────────────────
@@ -77,6 +78,20 @@
     el.textContent = content;
     return el;
   };
+  const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[ch]));
+  const formatTime = (value) => {
+    if (!value) return '--';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '--';
+    return date.toLocaleTimeString('id-ID', { hour12: false });
+  };
+  const getCookie = (name) => document.cookie
+    .split(';')
+    .map((item) => item.trim())
+    .find((item) => item.startsWith(`${name}=`))
+    ?.slice(name.length + 1) || '';
 
   // ── BUILD MIMIC SVG ─────────────────────────────────────────────────────────
   const BELT_X0 = 190;
@@ -464,6 +479,101 @@
     } catch (_) { /* dashboard remains usable offline */ }
   }
 
+
+  function brokerLabel(status) {
+    return {
+      connected: 'CONNECTED',
+      connecting: 'CONNECTING',
+      disconnected: 'DISCONNECTED',
+      failed: 'FAILED TO CONNECT',
+      disabled: 'DISABLED',
+    }[status] || String(status || '--').toUpperCase();
+  }
+
+  function payloadPreview(message) {
+    if (!message) return '';
+    const value = message.payload ?? message.raw ?? '';
+    if (typeof value === 'string') return value;
+    try { return JSON.stringify(value, null, 2); }
+    catch (_) { return String(value); }
+  }
+
+  function renderBrokerStatus() {
+    const broker = state.broker || {};
+    const status = broker.status || 'disabled';
+    const pill = $('#brokerPill');
+    const summary = $('#brokerSummary');
+    const host = $('#brokerHost');
+    const topic = $('#brokerTopic');
+    const error = $('#brokerError');
+    const feed = $('#brokerFeed');
+    if (!pill || !feed) return;
+
+    pill.dataset.status = status;
+    pill.textContent = brokerLabel(status);
+    if (summary) summary.textContent = brokerLabel(status).toLowerCase();
+    if (host) host.textContent = broker.broker ? `${broker.broker}:${broker.port || ''}` : '--';
+    if (topic) topic.textContent = broker.topic || '--';
+    if (error) error.textContent = broker.last_error || '';
+
+    const messages = broker.messages || [];
+    if (!messages.length) {
+      feed.innerHTML = '<div class="broker-empty">Belum ada data subscribe</div>';
+      return;
+    }
+    feed.innerHTML = messages.slice(0, 10).map((message) => `
+      <div class="broker-msg">
+        <time>${escapeHtml(formatTime(message.received_at))}</time>
+        <strong>${escapeHtml(message.topic || '--')}</strong>
+        <code>${escapeHtml(payloadPreview(message))}</code>
+      </div>`).join('');
+  }
+
+  async function loadBrokerStatus() {
+    try {
+      const response = await fetch(`${getBasePath()}/api/broker-status/`, { credentials: 'same-origin' });
+      if (!response.ok) return;
+      state.broker = await response.json();
+      renderBrokerStatus();
+    } catch (_) { /* broker panel keeps last known state */ }
+  }
+
+  async function reconnectBroker() {
+    const button = $('#brokerReconnect');
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch(`${getBasePath()}/api/broker-reconnect/`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'X-CSRFToken': decodeURIComponent(getCookie('csrftoken')) },
+      });
+      if (response.ok) {
+        state.broker = await response.json();
+        renderBrokerStatus();
+        log('info', 'MQTT', 'Reconnect broker diminta');
+      } else {
+        log('warn', 'MQTT', 'Reconnect broker gagal dikirim');
+      }
+    } catch (_) {
+      log('warn', 'MQTT', 'Reconnect broker gagal dikirim');
+    } finally {
+      if (button) button.disabled = false;
+    }
+  }
+
+  function initPanelToggles() {
+    document.querySelectorAll('.compact-panel.is-collapsible .panel-toggle').forEach((button) => {
+      const panel = button.closest('.compact-panel');
+      if (!panel) return;
+      button.setAttribute('aria-expanded', 'true');
+      button.addEventListener('click', () => {
+        const collapsed = panel.classList.toggle('is-collapsed');
+        button.textContent = collapsed ? '+' : '-';
+        button.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      });
+    });
+  }
+
   // ── WEBSOCKET ────────────────────────────────────────────────────────────────
   let ws = null;
   let wsTimer = null;
@@ -493,6 +603,10 @@
         if (payload.robot_queue) {
           state.robotQueue = payload.robot_queue;
           renderRobotQueue();
+        }
+        if (payload.broker_status) {
+          state.broker = payload.broker_status;
+          renderBrokerStatus();
         }
       } catch (_) { /* ignore malformed frames */ }
     };
@@ -557,11 +671,15 @@
   buildCookerCards();
   buildConveyors();
   buildCommands();
+  initPanelToggles();
   loadRobotQueue();
+  loadBrokerStatus();
   setInterval(loadRobotQueue, 3000);
+  setInterval(loadBrokerStatus, 3000);
   log('ok', 'SYSTEM', 'Kuali HMI siap');
   render();
   renderRobotQueue();
+  renderBrokerStatus();
   requestAnimationFrame(loop);
   setInterval(tick, 500);
   connectWS();
@@ -569,6 +687,8 @@
   $('#railToggle').addEventListener('click', () => {
     document.body.classList.toggle('rail-collapsed');
   });
+
+  $('#brokerReconnect')?.addEventListener('click', reconnectBroker);
 
   $('#ackBtn').addEventListener('click', () => {
     state.alarms.forEach((a) => { a.ack = true; });

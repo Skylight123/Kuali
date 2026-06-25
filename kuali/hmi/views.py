@@ -11,6 +11,7 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from databases import emailotpmodels
+from integrations.mqtt import broker_monitor, order_listener
 from services import auth_service, robot_queue_service
 from services.auth_service import ONE_YEAR
 
@@ -233,6 +234,18 @@ def robot_order_api(request):
     except ValueError as exc:
         return JsonResponse({"error": str(exc)}, status=400)
     return JsonResponse({"order_id": order.order_id, "status": order.aggregate_status})
+
+
+@login_required
+def broker_status_api(request):
+    return JsonResponse(broker_monitor.snapshot())
+
+
+@login_required
+def broker_reconnect_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    return JsonResponse(order_listener.request_reconnect())
 
 def _start_otp_session(request, user, purpose):
     auth_service.start_otp_session(request, user, purpose)

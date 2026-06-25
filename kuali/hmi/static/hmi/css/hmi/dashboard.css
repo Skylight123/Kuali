@@ -720,3 +720,166 @@ body.rail-collapsed .rail-toggle {
   body.rail-collapsed .main-grid { grid-template-columns: 1fr; }
   body.rail-collapsed .rail-toggle { writing-mode: initial; min-height: 34px; }
 }
+
+
+/* Right rail collapsible panels and broker monitor */
+.compact-panel {
+  overflow: visible;
+}
+.compact-panel .panel-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.compact-panel .panel-head > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.compact-panel .panel-head > small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.panel-body {
+  min-width: 0;
+  overflow: visible;
+}
+.panel-toggle {
+  width: 26px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--txt);
+  background: #211811;
+  line-height: 1;
+}
+.panel-toggle:hover { border-color: var(--edge); color: var(--accent); }
+.compact-panel.is-collapsed .panel-body { display: none; }
+.compact-panel.is-collapsed .panel-head { border-bottom: 0; }
+.compact-panel.is-collapsed .panel-toggle { color: var(--accent); }
+
+.broker-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+.broker-status-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.broker-pill {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--faint);
+  background: #130d09;
+  font: 700 10px var(--mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.broker-pill[data-status="connected"] { color: var(--run); border-color: rgba(110, 203, 125, .35); background: rgba(110, 203, 125, .08); }
+.broker-pill[data-status="connecting"] { color: var(--warn); border-color: rgba(231, 177, 90, .36); background: rgba(231, 177, 90, .08); }
+.broker-pill[data-status="failed"],
+.broker-pill[data-status="disconnected"] { color: var(--fault); border-color: rgba(224, 106, 90, .36); background: rgba(224, 106, 90, .08); }
+.broker-meta {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.broker-meta > div {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #160f0a;
+}
+.broker-meta small,
+.broker-meta span {
+  display: block;
+  color: var(--faint);
+  font-size: 8px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.broker-meta strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--txt);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.broker-error {
+  display: none;
+  padding: 7px;
+  border: 1px solid rgba(224, 106, 90, .28);
+  border-radius: 6px;
+  color: var(--fault);
+  background: rgba(224, 106, 90, .06);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.broker-error:not(:empty) { display: block; }
+.broker-feed {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #130d09;
+}
+.broker-feed::-webkit-scrollbar { width: 6px; }
+.broker-feed::-webkit-scrollbar-thumb { border-radius: 3px; background: #2a1c12; }
+.broker-empty {
+  padding: 10px;
+  color: var(--faint);
+  font-size: 10px;
+}
+.broker-msg {
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border-bottom: 1px solid #211711;
+}
+.broker-msg:last-child { border-bottom: 0; }
+.broker-msg time {
+  color: var(--faint);
+  font-size: 9px;
+}
+.broker-msg strong {
+  color: var(--accent);
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.broker-msg code {
+  display: block;
+  max-height: 96px;
+  overflow: auto;
+  padding: 6px;
+  border-radius: 5px;
+  color: var(--dim);
+  background: #0e0906;
+  font: 500 9px var(--mono);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .compact-panel .panel-head { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .broker-feed { max-height: 240px; }
+}
