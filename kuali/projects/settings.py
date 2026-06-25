@@ -69,15 +69,33 @@ elif not FORCE_SCRIPT_NAME.startswith('/'):
     FORCE_SCRIPT_NAME = f'/{FORCE_SCRIPT_NAME}'
 
 # Tidak memakai domain/public origin. Origin dipercaya dibangun dari HOSTS/IP.
+PUBLIC_ORIGIN = config('PUBLIC_ORIGIN', default='').strip()
+PUBLIC_ORIGINS = origins_from_hosts(parse_csv(PUBLIC_ORIGIN))
 HOST_ORIGINS = origins_from_hosts(ALLOWED_HOSTS)
-CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(HOST_ORIGINS))
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys([*HOST_ORIGINS, *PUBLIC_ORIGINS]))
+SECURE_COOKIE_DEFAULT = (not DEBUG) and any(
+    origin.startswith('https://') for origin in PUBLIC_ORIGINS
+)
 
 # Nginx terminates TLS and forwards scheme/host to Daphne/Django.
 USE_X_FORWARDED_HOST = config('USE_X_FORWARDED_HOST', default=True, cast=bool)
 USE_X_FORWARDED_PORT = config('USE_X_FORWARDED_PORT', default=True, cast=bool)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=not DEBUG, cast=bool)
-SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=not DEBUG, cast=bool)
+
+# Cookie-backed browser identity for Django's server-side session.
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_NAME = config('SESSION_COOKIE_NAME', default='kuali_sessionid')
+SESSION_COOKIE_AGE = 60 * 60 * 24 * 365
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = 'Lax'
+SESSION_COOKIE_PATH = FORCE_SCRIPT_NAME or '/'
+SESSION_EXPIRE_AT_BROWSER_CLOSE = config('SESSION_EXPIRE_AT_BROWSER_CLOSE', default=False, cast=bool)
+SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=SECURE_COOKIE_DEFAULT, cast=bool)
+
+CSRF_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_PATH = FORCE_SCRIPT_NAME or '/'
+CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=SECURE_COOKIE_DEFAULT, cast=bool)
 
 # Application definition
 INSTALLED_APPS = [
@@ -237,7 +255,7 @@ DEFAULT_FROM_EMAIL = config(
     'DEFAULT_FROM_EMAIL',
     default=EMAIL_HOST_USER or 'noreply@kuali.local'
 )
-OTP_EMAIL_METHOD = config('OTP_EMAIL_METHOD', default='api')
+OTP_EMAIL_METHOD = config('OTP_EMAIL_METHOD', default='console')
 
 # MQTT integration for kitchen robot devices.
 MQTT_ENABLED = config('MQTT_ENABLED', default=False, cast=bool)

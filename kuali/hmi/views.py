@@ -1,4 +1,5 @@
 import logging
+from urllib.parse import urlsplit
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login
@@ -21,6 +22,19 @@ def _default_redirect_for_user(user):
 
 
 def _safe_redirect_after_login(request, next_url):
+    next_path = urlsplit(next_url or "").path.rstrip("/") or "/"
+    script_name = (request.META.get("SCRIPT_NAME") or "").rstrip("/")
+    dashboard_paths = {
+        "/",
+        "/hmi",
+        reverse("hmi").rstrip("/"),
+    }
+    if script_name:
+        dashboard_paths.add(f"{script_name}/hmi")
+
+    if next_path in dashboard_paths:
+        return _default_redirect_for_user(request.user)
+
     if url_has_allowed_host_and_scheme(
         next_url,
         allowed_hosts={request.get_host()},

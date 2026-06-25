@@ -1,11 +1,13 @@
 from django.contrib.auth import views as auth_views
 from django.urls import path
+from django.views.generic import RedirectView
 
 from . import views
 
 
 urlpatterns = [
-    path("", views.hmi_dashboard, name="hmi"),
+    path("", RedirectView.as_view(pattern_name="hmi", permanent=False), name="root"),
+    path("hmi/", views.hmi_dashboard, name="hmi"),
     path("login/", views.login_view, name="login"),
     path("logout/", auth_views.LogoutView.as_view(next_page="login"), name="logout"),
     path("signup/", views.signup_view, name="signup"),

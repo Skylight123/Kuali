@@ -16,6 +16,19 @@ class AuthFlowTests(TestCase):
     def setUp(self):
         set_script_prefix('/')
 
+    def test_hmi_dashboard_uses_hmi_url_not_root(self):
+        self.assertEqual(reverse("hmi"), "/hmi/")
+
+        response = self.client.get("/")
+        self.assertRedirects(response, reverse("hmi"), fetch_redirect_response=False)
+
+        response = self.client.get(reverse("hmi"))
+        self.assertRedirects(
+            response,
+            f"{reverse('login')}?next={reverse('hmi')}",
+            fetch_redirect_response=False,
+        )
+
     def test_auth_pages_render_with_login_design(self):
         response = self.client.get(reverse("signup"))
         self.assertContains(response, "Daftar akun")
@@ -100,6 +113,7 @@ class AuthFlowTests(TestCase):
         self.assertRedirects(response, reverse("hmi"))
         response = self.client.get(reverse("hmi"))
         self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "hmi/dashboard.html")
         self.assertContains(response, "KitchenOperator")
 
     def test_forgot_password_verify_otp_enables_change_password(self):
@@ -129,3 +143,37 @@ class AuthFlowTests(TestCase):
         self.assertRedirects(response, reverse("login"))
         user.refresh_from_db()
         self.assertTrue(user.check_password("TemporaryPass124"))
+
+@override_settings(
+    FORCE_SCRIPT_NAME='/Kuali',
+    STATIC_URL='/Kuali/static/',
+    MEDIA_URL='/Kuali/media/',
+    OTP_EMAIL_METHOD='console',
+)
+class PrefixedAuthFlowTests(TestCase):
+    def setUp(self):
+        set_script_prefix('/Kuali/')
+        User.objects.create_user(
+            username="prefixed_operator",
+            email="prefixed@example.local",
+            password="TemporaryPass123",
+        )
+
+    def test_login_next_without_prefix_redirects_to_prefixed_hmi_dashboard(self):
+        response = self.client.post("/login/", {
+            "username": "prefixed_operator",
+            "password": "TemporaryPass123",
+            "next": "/hmi/",
+        }, SCRIPT_NAME="/Kuali")
+
+        self.assertRedirects(response, reverse("hmi"), fetch_redirect_response=False)
+
+    def test_login_next_with_prefix_redirects_to_prefixed_hmi_dashboard(self):
+        response = self.client.post("/login/", {
+            "username": "prefixed_operator",
+            "password": "TemporaryPass123",
+            "next": "/Kuali/hmi/",
+        }, SCRIPT_NAME="/Kuali")
+
+        self.assertRedirects(response, reverse("hmi"), fetch_redirect_response=False)
+
