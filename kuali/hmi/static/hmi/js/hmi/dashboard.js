@@ -1,557 +1,530 @@
 (() => {
-    'use strict';
+  'use strict';
 
-    const $ = (selector) => document.querySelector(selector);
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const make = (tag, attrs, parent) => {
-        const node = document.createElementNS(svgNS, tag);
-        Object.entries(attrs || {}).forEach(([key, value]) => node.setAttribute(key, value));
-        if (parent) parent.appendChild(node);
-        return node;
-    };
-    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+  // ── MODBUS ADDRESS MAP ─────────────────────────────────────────────────────
+  // Sesuaikan nilai integer ini dengan register PLC aktual
+  const ADDR = {
+    STIRRER_1:  1,
+    STIRRER_2:  2,
+    CONVEYOR_1: 3,
+    CONVEYOR_2: 4,
+    CONVEYOR_3: 5,
+    CONVEYOR_4: 6,
+    CONVEYOR_5: 7,
+    CONVEYOR_6: 8,
+    CMD_9:      9,
+    CMD_10:     10,
+  };
 
-    const ingredients = [
-        { id: 'sauce', name: 'Sauce', unit: 'ml', color: '#d6453e' },
-        { id: 'veg', name: 'Sayur', unit: 'g', color: '#54b85c' },
-        { id: 'protein', name: 'Protein', unit: 'g', color: '#e8843a' },
-    ];
-    const recipes = {
-        original: { name: 'Signature Bowl', cook: 22, items: { sauce: 40, veg: 60, protein: 45 } },
-        spicy: { name: 'Spicy Garlic', cook: 25, items: { sauce: 56, veg: 42, protein: 55 } },
-        garden: { name: 'Garden Fresh', cook: 20, items: { sauce: 34, veg: 92, protein: 24 } },
-        protein: { name: 'Protein Boost', cook: 27, items: { sauce: 44, veg: 35, protein: 78 } },
-    };
-    const recipeKeys = Object.keys(recipes);
-    const cookers = [{ id: 1, cx: 420 }, { id: 2, cx: 760 }];
-    const laneY = (index) => 135 + index * 86;
-    const belt = { x0: 160, x1: 1000, tread: 24 };
-    const bowlY = 520;
+  // ── CONVEYOR DEFINITIONS (3 group) ─────────────────────────────────────────
+  const GROUPS = [
+    {
+      label: 'Mie',
+      conveyors: [
+        { id: 1, name: 'Mie', addr: ADDR.CONVEYOR_1, color: '#dcc06a' },
+      ],
+    },
+    {
+      label: 'Sauce',
+      conveyors: [
+        { id: 2, name: 'Sauce 1', addr: ADDR.CONVEYOR_2, color: '#d6453e' },
+        { id: 3, name: 'Sauce 2', addr: ADDR.CONVEYOR_3, color: '#e8843a' },
+      ],
+    },
+    {
+      label: 'Topping',
+      conveyors: [
+        { id: 4, name: 'Topping 1', addr: ADDR.CONVEYOR_4, color: '#54b85c' },
+        { id: 5, name: 'Topping 2', addr: ADDR.CONVEYOR_5, color: '#46b8e0' },
+        { id: 6, name: 'Topping 3', addr: ADDR.CONVEYOR_6, color: '#b879e0' },
+      ],
+    },
+  ];
+  const ALL_CONVEYORS = GROUPS.flatMap((g) => g.conveyors);
 
-    const state = {
-        line: 'RUN',
-        auto: true,
-        estop: false,
-        output: 0,
-        alarmId: 0,
-        alarms: [],
-        cookers: {},
-        conveyors: {},
-    };
-    const refs = { tread: {}, gate: {}, chute: {}, ring: {}, heat: {}, steam: {}, paddle: {}, mini: {} };
-    const particles = [];
-    let particleLayer;
+  const COOKERS = [{ id: 1, cx: 390 }, { id: 2, cx: 770 }];
 
-    cookers.forEach((cooker, index) => {
-        state.cookers[cooker.id] = {
-            id: cooker.id,
-            state: 'IDLE',
-            recipeKey: recipeKeys[index % recipeKeys.length],
-            batch: 0,
-            temp: 31,
-            rpm: 0,
-            setRpm: 46 + index * 5,
-            timer: 0,
-            cookTotal: 0,
-            progress: 0,
-            hold: false,
-            doneItems: {},
-            abort: false,
-        };
+  // ── PLANT STATE ─────────────────────────────────────────────────────────────
+  const state = {
+    ws: 'connecting',   // 'connecting' | 'ok' | 'error'
+    registers: {},      // address(int) → value(int) — filled by WebSocket
+    alarms: [],
+    alarmId: 0,
+  };
+
+  // ── SVG REFS ────────────────────────────────────────────────────────────────
+  const refs = { paddle: {}, tread: {}, ring: {}, steam: {}, heat: {}, mini: {} };
+  const beltOffset = {};
+  ALL_CONVEYORS.forEach((c) => { beltOffset[c.id] = 0; });
+
+  // ── SVG HELPERS ─────────────────────────────────────────────────────────────
+  const NS = 'http://www.w3.org/2000/svg';
+  const $ = (sel) => document.querySelector(sel);
+  const make = (tag, attrs, parent) => {
+    const el = document.createElementNS(NS, tag);
+    Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v));
+    if (parent) parent.appendChild(el);
+    return el;
+  };
+  const txt = (parent, x, y, content, cls) => {
+    const el = make('text', { x, y, class: cls || 'mimic-label' }, parent);
+    el.textContent = content;
+    return el;
+  };
+
+  // ── BUILD MIMIC SVG ─────────────────────────────────────────────────────────
+  const BELT_X0 = 190;
+  const BELT_X1 = 990;
+  const BELT_TREAD = 22;
+  const LANE_Y = (i) => 88 + i * 72;   // 6 lanes
+  const WOK_Y = 610;
+
+  function buildMimic() {
+    const host = $('#mimicHost');
+    const svg = make('svg', { viewBox: '0 0 1160 780', role: 'img', 'aria-label': 'Digital twin Kuali' });
+    host.appendChild(svg);
+
+    const defs = make('defs', {}, svg);
+    defs.innerHTML = `
+      <linearGradient id="zkSteel" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0"    stop-color="#7a6a58"/>
+        <stop offset="0.5"  stop-color="#4e4030"/>
+        <stop offset="1"    stop-color="#32261a"/>
+      </linearGradient>
+      <radialGradient id="zkBowl" cx="50%" cy="36%" r="70%">
+        <stop offset="0" stop-color="#1e1510"/>
+        <stop offset="1" stop-color="#080502"/>
+      </radialGradient>
+      <radialGradient id="zkHeat" cx="50%" cy="50%" r="50%">
+        <stop offset="0"    stop-color="#e07030"/>
+        <stop offset="0.55" stop-color="#c55018" stop-opacity=".48"/>
+        <stop offset="1"    stop-color="#c55018" stop-opacity="0"/>
+      </radialGradient>
+      ${COOKERS.map((c) => `
+        <clipPath id="sc${c.id}" clipPathUnits="userSpaceOnUse">
+          <ellipse cx="${c.cx}" cy="${WOK_Y}" rx="80" ry="21"/>
+        </clipPath>`).join('')}
+    `;
+
+    // Section labels (far left)
+    txt(svg, 12, LANE_Y(0) + 4,  'MIE',     'group-label');
+    txt(svg, 12, LANE_Y(1) + 4,  'SAUCE',   'group-label');
+    txt(svg, 12, LANE_Y(3) + 4,  'TOPPING', 'group-label');
+
+    // Group separator lines
+    const sepY = [LANE_Y(0) + 36, LANE_Y(2) + 36];
+    sepY.forEach((y) => make('line', { x1: BELT_X0, y1: y, x2: BELT_X1, y2: y, class: 'group-sep' }, svg));
+
+    // Vertical chutes per cooker
+    COOKERS.forEach((ck) => {
+      make('rect', {
+        x: ck.cx - 10,
+        y: LANE_Y(5) + 12,
+        width: 20,
+        height: WOK_Y - LANE_Y(5) - 12,
+        rx: 6,
+        fill: '#100905',
+        stroke: '#2d2018',
+        'stroke-width': 1,
+      }, svg);
     });
-    ingredients.forEach((item) => {
-        state.conveyors[item.id] = { running: false, speed: 0, target: null };
+
+    // Conveyor lanes
+    ALL_CONVEYORS.forEach((cv, i) => {
+      const y = LANE_Y(i);
+
+      // Belt track
+      make('rect', { x: BELT_X0, y: y - 9, width: BELT_X1 - BELT_X0, height: 18, rx: 9, class: 'belt-shell' }, svg);
+
+      // Tread marks
+      const tread = make('g', { class: 'belt-tread' }, svg);
+      for (let x = BELT_X0 - BELT_TREAD; x < BELT_X1 + BELT_TREAD; x += BELT_TREAD) {
+        make('line', { x1: x, y1: y - 9, x2: x - 7, y2: y + 9 }, tread);
+      }
+      refs.tread[cv.id] = { node: tread, offset: 0 };
+
+      // Belt active color overlay
+      const belt_active = make('rect', {
+        id: `belt-active-${cv.id}`,
+        x: BELT_X0 + 2, y: y - 7, width: BELT_X1 - BELT_X0 - 4, height: 14,
+        rx: 7, fill: cv.color, opacity: 0,
+        style: 'transition: opacity .2s',
+      }, svg);
+      refs.tread[cv.id].active = belt_active;
+
+      // Lane name label (left)
+      txt(svg, BELT_X0 - 12, y + 4, cv.name.toUpperCase(), 'mimic-label').setAttribute('text-anchor', 'end');
+
+      // Lane ID label (right)
+      txt(svg, BELT_X1 + 14, y + 4, `C${cv.id}`, 'mimic-label');
+
+      // Drop arrows into cookers
+      COOKERS.forEach((ck) => {
+        make('path', {
+          d: `M${ck.cx - 7} ${y + 9} L${ck.cx + 7} ${y + 9} L${ck.cx} ${y + 20} Z`,
+          fill: '#1f1610', stroke: '#352a20', 'stroke-width': 1,
+          id: `gate-${cv.id}-${ck.id}`,
+        }, svg);
+      });
     });
 
-    function drawText(parent, x, y, text, className) {
-        const node = make('text', { x, y, class: className || 'mimic-label' }, parent);
-        node.textContent = text;
-        return node;
+    // Cooker labels
+    COOKERS.forEach((ck) => {
+      txt(svg, ck.cx, WOK_Y + 112, `COOKER ${ck.id}`, 'mimic-label').setAttribute('text-anchor', 'middle');
+      drawCooker(svg, ck);
+    });
+  }
+
+  function drawCooker(svg, cooker) {
+    const { cx } = cooker;
+    const cy = WOK_Y;
+
+    // Heat glow (below body)
+    refs.heat[cooker.id] = make('ellipse', {
+      cx, cy: cy + 84, rx: 88, ry: 30,
+      fill: 'url(#zkHeat)', opacity: 0,
+      style: 'transition: opacity .4s',
+    }, svg);
+
+    // Body trapezoid
+    make('path', {
+      d: `M${cx - 94} ${cy + 34} L${cx + 94} ${cy + 34} L${cx + 80} ${cy + 92} L${cx - 80} ${cy + 92} Z`,
+      fill: 'url(#zkSteel)', class: 'cooker-body',
+    }, svg);
+
+    // Outer rim ellipse
+    make('ellipse', { cx, cy, rx: 90, ry: 27, fill: 'url(#zkSteel)', class: 'cooker-body' }, svg);
+
+    // Inner bowl (dark)
+    make('ellipse', { cx, cy, rx: 80, ry: 21, fill: 'url(#zkBowl)' }, svg);
+
+    // Status ring
+    refs.ring[cooker.id] = make('ellipse', {
+      cx, cy, rx: 93, ry: 30, class: 'cooker-ring',
+    }, svg);
+
+    // ── STIRRER — clipped to inner bowl ────────────────────────────────────
+    const paddle = make('g', {
+      class: 'paddle',
+      'clip-path': `url(#sc${cooker.id})`,
+    }, svg);
+
+    // Horizontal arm (cream/white)
+    make('rect', {
+      x: cx - 78, y: cy - 5, width: 156, height: 10, rx: 5,
+      fill: '#d4c5ae', opacity: .84,
+    }, paddle);
+
+    // Vertical arm (gold)
+    make('rect', {
+      x: cx - 5, y: cy - 78, width: 10, height: 156, rx: 5,
+      fill: '#c9912a', opacity: .72,
+    }, paddle);
+
+    // Center hub
+    make('circle', { cx, cy, r: 8, fill: '#e7b15a' }, paddle);
+
+    refs.paddle[cooker.id] = { node: paddle, cx, cy, angle: 0 };
+
+    // Steam wisps
+    const steam = make('g', { class: 'steam', style: 'opacity:0' }, svg);
+    [-24, 0, 24].forEach((dx) => {
+      make('path', { d: `M${cx + dx} ${cy - 10} q-8 -18 0 -34 q8 -16 0 -30` }, steam);
+    });
+    refs.steam[cooker.id] = steam;
+
+    // Temp / state mini-label inside bowl
+    const label = make('text', {
+      x: cx, y: cy + 8, class: 'mimic-label',
+      'text-anchor': 'middle', style: 'font-size:14px',
+    }, svg);
+    label.textContent = '--';
+    refs.mini[cooker.id] = label;
+  }
+
+  // ── BUILD COOKER CARDS (monitor only, no simulation controls) ───────────────
+  function buildCookerCards() {
+    const host = $('#cookerCards');
+    host.innerHTML = '';
+    COOKERS.forEach((ck) => {
+      const card = document.createElement('article');
+      card.className = 'cooker-card';
+      card.id = `card-${ck.id}`;
+      card.dataset.state = 'IDLE';
+      card.innerHTML = `
+        <div class="card-head">
+          <strong>COOKER ${ck.id}</strong>
+          <span class="state-pill" id="pill-${ck.id}" data-state="IDLE">IDLE</span>
+        </div>
+        <div class="readouts">
+          <div class="readout">
+            <small>Stirrer</small>
+            <strong id="stir-${ck.id}">OFF</strong>
+          </div>
+          <div class="readout">
+            <small>Addr Modbus</small>
+            <strong>${ADDR['STIRRER_' + ck.id]}</strong>
+          </div>
+          <div class="readout">
+            <small>Status</small>
+            <strong id="stir-status-${ck.id}">—</strong>
+          </div>
+        </div>`;
+      host.appendChild(card);
+    });
+  }
+
+  // ── BUILD CONVEYOR CARDS (grouped) ──────────────────────────────────────────
+  function buildConveyors() {
+    const host = $('#conveyorGrid');
+    host.innerHTML = '';
+    GROUPS.forEach((group) => {
+      const groupEl = document.createElement('div');
+      groupEl.className = 'conv-group';
+
+      const labelEl = document.createElement('p');
+      labelEl.className = 'conv-group-label';
+      labelEl.textContent = group.label;
+      groupEl.appendChild(labelEl);
+
+      const cardsEl = document.createElement('div');
+      cardsEl.className = 'conv-cards';
+      group.conveyors.forEach((cv) => {
+        const card = document.createElement('article');
+        card.className = 'conveyor-card';
+        card.id = `conv-${cv.id}`;
+        card.innerHTML = `
+          <div class="conveyor-top">
+            <span class="swatch" style="background:${cv.color}"></span>
+            <strong>${cv.name}</strong>
+            <small>C${cv.id} · addr ${cv.addr}</small>
+          </div>
+          <div class="belt-meter">
+            <i></i>
+            <span id="cv-st-${cv.id}">STANDBY</span>
+          </div>`;
+        cardsEl.appendChild(card);
+      });
+      groupEl.appendChild(cardsEl);
+      host.appendChild(groupEl);
+    });
+  }
+
+  // ── BUILD COMMAND PANEL (addr 9 & 10) ───────────────────────────────────────
+  function buildCommands() {
+    const host = $('#commandPanel');
+    if (!host) return;
+    host.innerHTML = `
+      <div class="cmd-group">
+        <div class="cmd-group-label">Perintah 9 (addr ${ADDR.CMD_9})</div>
+        <button type="button" class="cmd-btn is-on"  data-addr="${ADDR.CMD_9}"  data-val="1">ON</button>
+        <button type="button" class="cmd-btn is-off" data-addr="${ADDR.CMD_9}"  data-val="0">OFF</button>
+      </div>
+      <div class="cmd-group">
+        <div class="cmd-group-label">Perintah 10 (addr ${ADDR.CMD_10})</div>
+        <button type="button" class="cmd-btn is-on"  data-addr="${ADDR.CMD_10}" data-val="1">ON</button>
+        <button type="button" class="cmd-btn is-off" data-addr="${ADDR.CMD_10}" data-val="0">OFF</button>
+      </div>`;
+    host.querySelectorAll('.cmd-btn').forEach((btn) => {
+      btn.addEventListener('click', () =>
+        sendCommand(Number(btn.dataset.addr), Number(btn.dataset.val))
+      );
+    });
+  }
+
+  // ── RENDER (apply state.registers to DOM + SVG) ─────────────────────────────
+  function render() {
+    // WebSocket status pill
+    const pill = $('#linePill');
+    const lineText = $('#lineText');
+    if (state.ws === 'ok') {
+      pill.className = 'line-pill is-run';
+      lineText.textContent = 'WS ONLINE';
+    } else if (state.ws === 'error') {
+      pill.className = 'line-pill is-estop';
+      lineText.textContent = 'WS OFFLINE';
+    } else {
+      pill.className = 'line-pill is-stop';
+      lineText.textContent = 'CONNECTING…';
     }
 
-    function buildMimic() {
-        const host = $('#mimicHost');
-        const svg = make('svg', { viewBox: '0 0 1160 680', role: 'img', 'aria-label': 'Digital twin lini masak Kuali' });
-        host.appendChild(svg);
+    // Alarm badge
+    const openAlarms = state.alarms.filter((a) => !a.ack).length;
+    $('#alarmCount').textContent = openAlarms;
+    $('#alarmCount').style.color = openAlarms ? 'var(--warn)' : 'var(--run)';
 
-        const defs = make('defs', {}, svg);
-        defs.innerHTML = `
-            <linearGradient id="zkSteel" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0" stop-color="#afbbc4"/><stop offset="0.52" stop-color="#7d8b95"/><stop offset="1" stop-color="#53616b"/>
-            </linearGradient>
-            <radialGradient id="zkBowl" cx="50%" cy="34%" r="70%">
-                <stop offset="0" stop-color="#19252d"/><stop offset="1" stop-color="#070c10"/>
-            </radialGradient>
-            <radialGradient id="zkHeat" cx="50%" cy="50%" r="50%">
-                <stop offset="0" stop-color="#ff8a3d"/><stop offset="0.55" stop-color="#ff5a1f" stop-opacity=".54"/><stop offset="1" stop-color="#ff5a1f" stop-opacity="0"/>
-            </radialGradient>`;
+    // Active stirrers / conveyors counter
+    const activeStir = COOKERS.filter((ck) => Boolean(state.registers[ADDR['STIRRER_' + ck.id]])).length;
+    const activeCv   = ALL_CONVEYORS.filter((cv) => Boolean(state.registers[cv.addr])).length;
+    $('#activeBatch').textContent = `${activeStir}/2`;
+    $('#outputCount').textContent = `${activeCv}/6`;
 
-        drawText(svg, 24, 32, 'BAHAN', 'mimic-label');
-        drawText(svg, 470, 32, 'CONVEYOR ROUTING', 'mimic-label');
-        drawText(svg, 24, 458, 'COOKER', 'mimic-label');
+    // Stirrers
+    COOKERS.forEach((ck) => {
+      const on = Boolean(state.registers[ADDR['STIRRER_' + ck.id]]);
+      const pillEl = $(`#pill-${ck.id}`);
+      pillEl.dataset.state = on ? 'COOKING' : 'IDLE';
+      pillEl.textContent = on ? 'JALAN' : 'IDLE';
+      $(`#stir-${ck.id}`).textContent = on ? 'ON' : 'OFF';
+      $(`#stir-${ck.id}`).style.color = on ? 'var(--run)' : 'var(--faint)';
+      $(`#stir-status-${ck.id}`).textContent = on ? 'Berputar' : 'Berhenti';
+      $(`#card-${ck.id}`).dataset.state = on ? 'COOKING' : 'IDLE';
+      refs.ring[ck.id].setAttribute('stroke', on ? 'var(--clay)' : 'var(--idle)');
+      refs.steam[ck.id].style.opacity = on ? 1 : 0;
+      refs.heat[ck.id].style.opacity = on ? 0.7 : 0;
+      refs.mini[ck.id].textContent = on ? 'ON' : '--';
+    });
 
-        cookers.forEach((cooker) => {
-            make('rect', { x: cooker.cx - 30, y: 92, width: 60, height: bowlY - 92, rx: 8, class: 'chute' }, svg);
-            refs.chute[cooker.id] = make('rect', { x: cooker.cx - 31, y: 92, width: 62, height: bowlY - 92, rx: 8, class: 'chute-glow' }, svg);
-            drawText(svg, cooker.cx - 45, 78, `COOKER ${cooker.id}`, 'mimic-label');
-        });
+    // Conveyors
+    ALL_CONVEYORS.forEach((cv) => {
+      const on = Boolean(state.registers[cv.addr]);
+      const card = $(`#conv-${cv.id}`);
+      card.classList.toggle('is-running', on);
+      $(`#cv-st-${cv.id}`).textContent = on ? 'RUNNING' : 'STANDBY';
 
-        ingredients.forEach((item, index) => {
-            const y = laneY(index);
-            make('path', { d: `M34 ${y - 24} L138 ${y - 24} L128 ${y + 14} L44 ${y + 14} Z`, class: 'hopper-shell' }, svg);
-            make('rect', { x: 47, y: y - 18, width: 78, height: 26, rx: 2, fill: item.color, class: 'hopper-fill' }, svg);
-            drawText(svg, 44, y - 32, item.name.toUpperCase(), 'mimic-label');
+      // Tint belt overlay when running
+      if (refs.tread[cv.id]?.active) {
+        refs.tread[cv.id].active.setAttribute('opacity', on ? 0.12 : 0);
+      }
 
-            make('rect', { x: belt.x0, y: y - 10, width: belt.x1 - belt.x0, height: 20, rx: 10, class: 'belt-shell' }, svg);
-            const tread = make('g', { class: 'belt-tread' }, svg);
-            for (let x = belt.x0 - belt.tread; x < belt.x1 + belt.tread; x += belt.tread) {
-                make('line', { x1: x, y1: y - 10, x2: x - 8, y2: y + 10 }, tread);
-            }
-            refs.tread[item.id] = { node: tread, offset: 0 };
+      // Drop arrow color
+      COOKERS.forEach((ck) => {
+        const gate = $(`#gate-${cv.id}-${ck.id}`);
+        if (gate) gate.setAttribute('fill', on ? cv.color : '#1f1610');
+      });
+    });
+  }
 
-            cookers.forEach((cooker) => {
-                refs.gate[`${item.id}-${cooker.id}`] = make('path', {
-                    d: `M${cooker.cx - 10} ${y + 12} L${cooker.cx + 10} ${y + 12} L${cooker.cx} ${y + 25} Z`,
-                    class: 'gate',
-                }, svg);
-            });
-            drawText(svg, belt.x1 + 16, y + 4, `C-${item.id.toUpperCase()}`, 'mimic-label');
-        });
-
-        particleLayer = make('g', {}, svg);
-        cookers.forEach((cooker) => drawCooker(svg, cooker));
-    }
-
-    function drawCooker(svg, cooker) {
-        const cx = cooker.cx;
-        make('ellipse', { cx, cy: bowlY + 96, rx: 96, ry: 34, fill: 'url(#zkHeat)', class: 'heat-glow' }, svg);
-        refs.heat[cooker.id] = svg.lastChild;
-        make('path', { d: `M${cx - 102} ${bowlY + 40} L${cx + 102} ${bowlY + 40} L${cx + 88} ${bowlY + 104} L${cx - 88} ${bowlY + 104} Z`, fill: 'url(#zkSteel)', class: 'cooker-body' }, svg);
-        make('ellipse', { cx, cy: bowlY, rx: 92, ry: 30, fill: 'url(#zkSteel)', class: 'cooker-body' }, svg);
-        make('ellipse', { cx, cy: bowlY, rx: 80, ry: 22, fill: 'url(#zkBowl)' }, svg);
-        refs.ring[cooker.id] = make('ellipse', { cx, cy: bowlY, rx: 98, ry: 36, class: 'cooker-ring' }, svg);
-
-        const paddle = make('g', { class: 'paddle' }, svg);
-        make('path', { d: `M${cx - 46} ${bowlY - 4} Q${cx} ${bowlY - 22} ${cx + 46} ${bowlY + 4}`, fill: 'none', stroke: '#e8b94a', 'stroke-width': 4, 'stroke-linecap': 'round', opacity: .7 }, paddle);
-        make('rect', { x: cx - 3, y: bowlY - 24, width: 6, height: 48, rx: 3, fill: '#d4dde3', opacity: .9 }, paddle);
-        refs.paddle[cooker.id] = { node: paddle, cx, cy: bowlY, angle: 0 };
-
-        const steam = make('g', { class: 'steam' }, svg);
-        for (let k = 0; k < 3; k += 1) {
-            const sx = cx - 24 + k * 24;
-            make('path', { d: `M${sx} ${bowlY - 8} q -8 -18 0 -34 q 8 -16 0 -30` }, steam);
-        }
-        refs.steam[cooker.id] = steam;
-
-        refs.mini[cooker.id] = drawText(svg, cx - 16, bowlY + 82, '--', 'mimic-label');
-    }
-
-    function buildCookerCards() {
-        const host = $('#cookerCards');
-        host.innerHTML = '';
-        cookers.forEach((cooker) => {
-            const st = state.cookers[cooker.id];
-            const card = document.createElement('article');
-            card.className = 'cooker-card';
-            card.id = `card-${cooker.id}`;
-            card.dataset.state = 'IDLE';
-            card.innerHTML = `
-                <div class="card-head">
-                    <strong>COOKER ${cooker.id}</strong>
-                    <span class="batch-id" id="batch-${cooker.id}">#0</span>
-                    <span class="state-pill" id="pill-${cooker.id}" data-state="IDLE">IDLE</span>
-                </div>
-                <div class="readouts">
-                    <div class="readout"><small>Suhu</small><strong><span id="temp-${cooker.id}">31</span>C</strong></div>
-                    <div class="readout"><small>RPM</small><strong id="rpm-${cooker.id}">0</strong></div>
-                    <div class="readout"><small>Timer</small><strong id="timer-${cooker.id}">00:00</strong></div>
-                </div>
-                <div class="progress"><i id="progress-${cooker.id}"></i></div>
-                <div class="recipe-row">
-                    <span>Resep</span>
-                    <select id="recipe-${cooker.id}">${recipeKeys.map((key) => `<option value="${key}">${recipes[key].name}</option>`).join('')}</select>
-                </div>
-                <div class="ingredient-list" id="ingredients-${cooker.id}"></div>
-                <div class="card-actions">
-                    <button type="button" class="start" id="start-${cooker.id}">Start</button>
-                    <button type="button" id="stop-${cooker.id}">Stop</button>
-                    <button type="button" class="hold" id="hold-${cooker.id}">Hold</button>
-                </div>`;
-            host.appendChild(card);
-            $(`#recipe-${cooker.id}`).value = st.recipeKey;
-            $(`#recipe-${cooker.id}`).addEventListener('change', (event) => {
-                st.recipeKey = event.target.value;
-                renderIngredients(cooker.id);
-            });
-            $(`#start-${cooker.id}`).addEventListener('click', () => startBatch(cooker.id));
-            $(`#stop-${cooker.id}`).addEventListener('click', () => stopCooker(cooker.id));
-            $(`#hold-${cooker.id}`).addEventListener('click', () => toggleHold(cooker.id));
-            renderIngredients(cooker.id);
-        });
-    }
-
-    function renderIngredients(id) {
-        const st = state.cookers[id];
-        const recipe = recipes[st.recipeKey];
-        const host = $(`#ingredients-${id}`);
-        host.innerHTML = ingredients.map((item) => {
-            const amount = recipe.items[item.id] || 0;
-            const done = st.doneItems[item.id] ? 'is-done' : '';
-            return `<span class="ingredient-chip ${done}" data-chip="${item.id}-${id}"><i style="background:${item.color}"></i>${item.name} ${amount}${item.unit}</span>`;
-        }).join('');
-    }
-
-    function buildConveyors() {
-        const host = $('#conveyorGrid');
-        host.innerHTML = '';
-        ingredients.forEach((item) => {
-            const card = document.createElement('article');
-            card.className = 'conveyor-card';
-            card.id = `conv-${item.id}`;
-            card.innerHTML = `
-                <div class="conveyor-top"><span class="swatch" style="background:${item.color}"></span><strong>${item.name}</strong><small>C-${item.id.toUpperCase()}</small></div>
-                <div class="belt-meter"><i></i><span id="speed-${item.id}">0%</span></div>
-                <div class="conveyor-bottom"><span id="status-${item.id}">STANDBY</span><span id="target-${item.id}">TARGET -</span></div>`;
-            host.appendChild(card);
-        });
-    }
-
-    function formatTimer(seconds) {
-        const m = Math.floor(seconds / 60).toString().padStart(2, '0');
-        const s = Math.floor(seconds % 60).toString().padStart(2, '0');
-        return `${m}:${s}`;
-    }
-
-    function render() {
-        const active = Object.values(state.cookers).filter((item) => ['DISPENSING', 'COOKING', 'HOLD'].includes(item.state)).length;
-        $('#activeBatch').textContent = `${active}/2`;
-        $('#outputCount').textContent = `${state.output} porsi`;
-        const openAlarms = state.alarms.filter((alarm) => !alarm.ack).length;
-        $('#alarmCount').textContent = openAlarms;
-        $('#alarmCount').style.color = openAlarms ? 'var(--warn)' : 'var(--run)';
-        $('#linePill').className = `line-pill is-${state.line.toLowerCase()}`;
-        $('#lineText').textContent = state.line === 'RUN' ? 'LINE RUNNING' : state.line === 'STOP' ? 'LINE STOPPED' : 'EMERGENCY STOP';
-        $('#modeTag').textContent = state.auto ? 'SIM AUTO' : 'MANUAL';
-        $('#safetyState').textContent = state.estop ? 'ESTOP' : 'NORMAL';
-        $('#safetyState').style.color = state.estop ? 'var(--fault)' : 'var(--run)';
-
-        cookers.forEach((cooker) => {
-            const st = state.cookers[cooker.id];
-            const displayState = st.hold && st.state === 'COOKING' ? 'HOLD' : st.state;
-            $(`#card-${cooker.id}`).dataset.state = displayState;
-            $(`#batch-${cooker.id}`).textContent = `#${st.batch}`;
-            $(`#pill-${cooker.id}`).dataset.state = displayState;
-            $(`#pill-${cooker.id}`).textContent = displayState;
-            $(`#temp-${cooker.id}`).textContent = Math.round(st.temp);
-            $(`#rpm-${cooker.id}`).textContent = Math.round(st.rpm);
-            $(`#timer-${cooker.id}`).textContent = formatTimer(st.timer);
-            $(`#progress-${cooker.id}`).style.width = `${Math.round(st.progress * 100)}%`;
-            $(`#start-${cooker.id}`).disabled = st.state !== 'IDLE' || state.estop;
-            $(`#hold-${cooker.id}`).classList.toggle('is-active', st.hold);
-
-            const color = { IDLE: 'var(--idle)', DISPENSING: 'var(--route)', COOKING: 'var(--cook)', HOLD: 'var(--warn)', DONE: 'var(--done)' }[displayState];
-            refs.ring[cooker.id].setAttribute('stroke', color);
-            refs.heat[cooker.id].setAttribute('opacity', st.state === 'COOKING' ? clamp((st.temp - 45) / 180, 0, .9) : 0);
-            refs.steam[cooker.id].style.opacity = st.state === 'COOKING' ? 1 : 0;
-            refs.mini[cooker.id].textContent = st.state === 'COOKING' ? `${Math.round(st.temp)}C` : st.state === 'DISPENSING' ? '..' : '--';
-
-            const recipe = recipes[st.recipeKey];
-            ingredients.forEach((item) => {
-                const chip = document.querySelector(`[data-chip="${item.id}-${cooker.id}"]`);
-                if (!chip) return;
-                const conveyor = state.conveyors[item.id];
-                chip.classList.toggle('is-done', Boolean(st.doneItems[item.id] && recipe.items[item.id]));
-                chip.classList.toggle('is-active', conveyor.running && conveyor.target === cooker.id);
-            });
-        });
-
-        ingredients.forEach((item) => {
-            const cv = state.conveyors[item.id];
-            $(`#conv-${item.id}`).classList.toggle('is-running', cv.running);
-            $(`#speed-${item.id}`).textContent = `${Math.round(cv.speed)}%`;
-            $(`#status-${item.id}`).textContent = cv.running ? 'FEEDING' : 'STANDBY';
-            $(`#target-${item.id}`).textContent = cv.target ? `TARGET C${cv.target}` : 'TARGET -';
-            cookers.forEach((cooker) => {
-                const gate = refs.gate[`${item.id}-${cooker.id}`];
-                gate.setAttribute('fill', cv.running && cv.target === cooker.id ? item.color : '#1b2932');
-            });
-        });
-        cookers.forEach((cooker) => {
-            const feeding = ingredients.some((item) => state.conveyors[item.id].running && state.conveyors[item.id].target === cooker.id);
-            refs.chute[cooker.id].style.opacity = feeding ? .72 : 0;
-        });
-    }
-
-    function renderLog() {
-        const host = $('#eventLog');
-        host.innerHTML = state.alarms.slice(0, 60).map((alarm) => {
-            const time = alarm.time.toLocaleTimeString('id-ID', { hour12: false });
-            return `<div class="log-row" data-level="${alarm.level}"><time>${time}</time><i></i><span><b>${alarm.source}</b> - ${alarm.message}</span></div>`;
-        }).join('');
-    }
-
-    function log(level, source, message) {
-        state.alarms.unshift({ id: ++state.alarmId, level, source, message, time: new Date(), ack: level === 'info' || level === 'ok' });
-        if (state.alarms.length > 120) state.alarms.pop();
-        renderLog();
-        render();
-    }
-
-    function spawnParticle(itemId, cookerId) {
-        if (particles.length > 120) return;
-        const item = ingredients.find((entry) => entry.id === itemId);
-        const lane = ingredients.findIndex((entry) => entry.id === itemId);
-        const y = laneY(lane) - 2;
-        const x1 = cookers.find((entry) => entry.id === cookerId).cx;
-        const node = make('circle', { cx: belt.x0 + 8, cy: y, r: 4.5, fill: item.color, opacity: .95 }, particleLayer);
-        particles.push({ node, x0: belt.x0 + 8, x1, y0: y, y1: bowlY - 3, phase: 'ride', elapsed: 0, rideMs: Math.abs(x1 - belt.x0) * 2.5, dropMs: 420 });
-    }
-
-    async function startBatch(id) {
-        const st = state.cookers[id];
-        if (st.state !== 'IDLE' || state.estop) return;
-        st.abort = false;
-        st.hold = false;
-        st.doneItems = {};
-        st.batch += 1;
-        st.state = 'DISPENSING';
-        st.progress = 0;
-        st.temp = Math.max(31, st.temp);
-        renderIngredients(id);
-        const recipe = recipes[st.recipeKey];
-        log('info', `COOKER ${id}`, `Batch #${st.batch} ${recipe.name} start`);
-
-        const activeItems = ingredients.filter((item) => (recipe.items[item.id] || 0) > 0);
-        for (let index = 0; index < activeItems.length; index += 1) {
-            if (aborted(id)) return cleanup(id);
-            const item = activeItems[index];
-            await dispense(id, item.id, recipe.items[item.id]);
-            st.doneItems[item.id] = true;
-            st.progress = .42 * ((index + 1) / activeItems.length);
-        }
-        if (aborted(id)) return cleanup(id);
-
-        st.state = 'COOKING';
-        st.rpm = st.setRpm;
-        st.cookTotal = recipe.cook;
-        st.timer = recipe.cook;
-        log('info', `COOKER ${id}`, `Cooking ${st.setRpm} rpm target 225C`);
-        await cook(id);
-        if (aborted(id)) return cleanup(id);
-
-        st.state = 'DONE';
-        st.rpm = 0;
-        st.progress = 1;
-        state.output += 1;
-        log('ok', `COOKER ${id}`, `Batch #${st.batch} complete`);
-        await sleep(2200);
-        cleanup(id, false);
-    }
-
-    async function dispense(id, itemId, amount) {
-        const cv = state.conveyors[itemId];
-        cv.running = true;
-        cv.target = id;
-        cv.speed = clamp(55 + amount / 3, 45, 100);
-        log('info', `C-${itemId.toUpperCase()}`, `Feed ${amount} -> Cooker ${id}`);
-        const count = clamp(Math.round(amount / 12), 4, 9);
-        for (let i = 0; i < count; i += 1) {
-            if (aborted(id)) break;
-            spawnParticle(itemId, id);
-            await sleep(820 / count);
-        }
-        await sleep(620);
-        cv.running = false;
-        cv.target = null;
-        cv.speed = 0;
-    }
-
-    function cook(id) {
-        return new Promise((resolve) => {
-            const st = state.cookers[id];
-            const timer = window.setInterval(() => {
-                if (aborted(id)) {
-                    window.clearInterval(timer);
-                    resolve();
-                    return;
-                }
-                if (st.hold) return;
-                st.timer = Math.max(0, st.timer - 1);
-                st.temp = Math.min(225, st.temp + (225 - st.temp) * .16 + 4);
-                st.progress = .42 + .58 * (1 - st.timer / st.cookTotal);
-                if (st.timer <= 0) {
-                    window.clearInterval(timer);
-                    resolve();
-                }
-            }, 1000);
-        });
-    }
-
-    function aborted(id) {
-        return state.estop || state.line === 'STOP' || state.cookers[id].abort;
-    }
-
-    function cleanup(id, abortedBatch = true) {
-        const st = state.cookers[id];
-        st.state = 'IDLE';
-        st.rpm = 0;
-        st.timer = 0;
-        st.progress = 0;
-        st.hold = false;
-        st.doneItems = {};
-        st.abort = false;
-        ingredients.forEach((item) => {
-            const cv = state.conveyors[item.id];
-            if (cv.target === id) {
-                cv.running = false;
-                cv.target = null;
-                cv.speed = 0;
-            }
-        });
-        renderIngredients(id);
-        if (abortedBatch) log('warn', `COOKER ${id}`, 'Batch aborted');
-        render();
-    }
-
-    function stopCooker(id) {
-        const st = state.cookers[id];
-        if (st.state === 'IDLE') return;
-        st.abort = true;
-        log('warn', `COOKER ${id}`, `Manual stop batch #${st.batch}`);
-    }
-
-    function toggleHold(id) {
-        const st = state.cookers[id];
-        if (st.state !== 'COOKING') return;
-        st.hold = !st.hold;
-        log(st.hold ? 'warn' : 'info', `COOKER ${id}`, st.hold ? 'Hold active' : 'Hold released');
-        render();
-    }
-
-    function setAuto(on) {
-        state.auto = Boolean(on);
-        state.line = state.estop ? 'ESTOP' : state.auto ? 'RUN' : 'STOP';
-        $('#autoBtn').classList.toggle('is-active', state.auto);
-        $('#autoBtn').textContent = state.auto ? 'AUTO' : 'MANUAL';
-        log(state.auto ? 'info' : 'warn', 'MODE', state.auto ? 'Auto simulation active' : 'Manual mode active');
-        render();
-    }
-
-    function toggleEstop() {
-        state.estop = !state.estop;
-        if (state.estop) {
-            state.line = 'ESTOP';
-            Object.values(state.cookers).forEach((st) => { st.abort = true; });
-            ingredients.forEach((item) => Object.assign(state.conveyors[item.id], { running: false, speed: 0, target: null }));
-            $('#estopBtn').classList.add('reset');
-            $('#estopBtn').textContent = 'RESET';
-            log('fault', 'SAFETY', 'Emergency stop active');
-        } else {
-            state.line = state.auto ? 'RUN' : 'STOP';
-            Object.values(state.cookers).forEach((st) => cleanup(st.id, false));
-            $('#estopBtn').classList.remove('reset');
-            $('#estopBtn').textContent = 'E-STOP';
-            log('ok', 'SAFETY', 'Emergency stop reset');
-        }
-        render();
-    }
-
-    function simStep() {
-        if (!state.auto || state.estop) return;
-        const idle = cookers.map((cooker) => cooker.id).filter((id) => state.cookers[id].state === 'IDLE');
-        if (!idle.length) return;
-        const id = idle[Math.floor(Math.random() * idle.length)];
-        const recipe = recipeKeys[Math.floor(Math.random() * recipeKeys.length)];
-        state.cookers[id].recipeKey = recipe;
-        $(`#recipe-${id}`).value = recipe;
-        renderIngredients(id);
-        startBatch(id);
-    }
-
-    let previous = performance.now();
-    function loop(now) {
-        const dt = Math.min(60, now - previous);
-        previous = now;
-        ingredients.forEach((item) => {
-            const cv = state.conveyors[item.id];
-            const ref = refs.tread[item.id];
-            if (cv.running) {
-                ref.offset = (ref.offset - (cv.speed / 100) * 90 * dt / 1000) % belt.tread;
-                ref.node.setAttribute('transform', `translate(${ref.offset},0)`);
-            }
-        });
-        cookers.forEach((cooker) => {
-            const st = state.cookers[cooker.id];
-            const ref = refs.paddle[cooker.id];
-            if (st.rpm > 0 && !st.hold) {
-                ref.angle = (ref.angle + st.rpm * 6 * dt / 1000) % 360;
-                ref.node.setAttribute('transform', `rotate(${ref.angle} ${ref.cx} ${ref.cy})`);
-            }
-        });
-        for (let i = particles.length - 1; i >= 0; i -= 1) {
-            const particle = particles[i];
-            particle.elapsed += dt;
-            if (particle.phase === 'ride') {
-                const k = Math.min(1, particle.elapsed / particle.rideMs);
-                particle.node.setAttribute('cx', particle.x0 + (particle.x1 - particle.x0) * k);
-                if (k >= 1) {
-                    particle.phase = 'drop';
-                    particle.elapsed = 0;
-                }
-            } else {
-                const k = Math.min(1, particle.elapsed / particle.dropMs);
-                particle.node.setAttribute('cy', particle.y0 + (particle.y1 - particle.y0) * k);
-                particle.node.setAttribute('opacity', .95 - .88 * k);
-                if (k >= 1) {
-                    particle.node.remove();
-                    particles.splice(i, 1);
-                }
-            }
-        }
-        requestAnimationFrame(loop);
-    }
-
-    function tick() {
-        Object.values(state.cookers).forEach((st) => {
-            if (st.state !== 'COOKING' && st.temp > 31) st.temp = Math.max(31, st.temp - 1.2);
-        });
-        $('#clock').textContent = `${new Date().toLocaleTimeString('id-ID', { hour12: false })} ${new Date().toLocaleDateString('id-ID', { day: '2-digit', month: 'short' })}`;
-        render();
-    }
-
-    const kualiApi = {
-        getState: () => JSON.parse(JSON.stringify(state)),
-        setAuto,
-        estop: toggleEstop,
-        startBatch,
-        stop: stopCooker,
-        update(payload = {}) {
-            if (payload.line) state.line = payload.line;
-            if (payload.cookers) Object.entries(payload.cookers).forEach(([id, patch]) => Object.assign(state.cookers[id], patch));
-            if (payload.conveyors) Object.entries(payload.conveyors).forEach(([id, patch]) => Object.assign(state.conveyors[id], patch));
-            render();
-        },
-        alarm: ({ level = 'info', source = 'EXT', message = '' } = {}) => log(level, source, message),
-    };
-
-    window.KualiHMI = kualiApi;
-
-    buildMimic();
-    buildCookerCards();
-    buildConveyors();
-    log('ok', 'SYSTEM', 'Kuali online');
+  // ── LOG ──────────────────────────────────────────────────────────────────────
+  function log(level, source, message) {
+    state.alarms.unshift({
+      id: ++state.alarmId, level, source, message,
+      time: new Date(),
+      ack: level === 'info' || level === 'ok',
+    });
+    if (state.alarms.length > 120) state.alarms.pop();
+    renderLog();
     render();
-    requestAnimationFrame(loop);
-    window.setInterval(tick, 250);
-    window.setInterval(simStep, 3600);
-    window.setTimeout(simStep, 600);
+  }
 
-    $('#autoBtn').addEventListener('click', () => setAuto(!state.auto));
-    $('#estopBtn').addEventListener('click', toggleEstop);
-    $('#ackBtn').addEventListener('click', () => {
-        state.alarms.forEach((alarm) => { alarm.ack = true; });
-        renderLog();
-        render();
+  function renderLog() {
+    $('#eventLog').innerHTML = state.alarms.slice(0, 60).map((a) => {
+      const t = a.time.toLocaleTimeString('id-ID', { hour12: false });
+      return `<div class="log-row" data-level="${a.level}"><time>${t}</time><i></i><span><b>${a.source}</b> — ${a.message}</span></div>`;
+    }).join('');
+  }
+
+  // ── WEBSOCKET ────────────────────────────────────────────────────────────────
+  let ws = null;
+  let wsTimer = null;
+
+  function connectWS() {
+    if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(`${proto}//${location.host}/ws/hmi/`);
+    state.ws = 'connecting';
+    render();
+
+    ws.onopen = () => {
+      state.ws = 'ok';
+      log('ok', 'WS', 'Terhubung ke server');
+    };
+
+    ws.onmessage = ({ data }) => {
+      try {
+        const payload = JSON.parse(data);
+        // Expected: { "registers": { "1": 1, "2": 0, ... } }
+        if (payload.registers) {
+          Object.entries(payload.registers).forEach(([addr, val]) => {
+            state.registers[Number(addr)] = Number(val);
+          });
+          render();
+        }
+      } catch (_) { /* ignore malformed frames */ }
+    };
+
+    ws.onclose = () => {
+      state.ws = 'error';
+      log('warn', 'WS', 'Koneksi terputus, mencoba ulang 5s…');
+      render();
+      wsTimer = setTimeout(connectWS, 5000);
+    };
+
+    ws.onerror = () => { state.ws = 'error'; render(); };
+  }
+
+  function sendCommand(address, value) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ write: { address, value } }));
+      log('info', `CMD.${address}`, `Kirim nilai ${value}`);
+    } else {
+      log('warn', 'WS', 'Tidak terhubung — perintah tidak terkirim');
+    }
+  }
+
+  // ── RAF ANIMATION LOOP ───────────────────────────────────────────────────────
+  let prev = performance.now();
+  function loop(now) {
+    const dt = Math.min(60, now - prev);
+    prev = now;
+
+    // Rotate stirrers when ON
+    COOKERS.forEach((ck) => {
+      const on = Boolean(state.registers[ADDR['STIRRER_' + ck.id]]);
+      const ref = refs.paddle[ck.id];
+      if (on) {
+        ref.angle = (ref.angle + 42 * dt / 1000) % 360;
+        ref.node.setAttribute('transform', `rotate(${ref.angle} ${ref.cx} ${ref.cy})`);
+      }
     });
+
+    // Scroll belt treads when conveyor ON
+    ALL_CONVEYORS.forEach((cv) => {
+      const on = Boolean(state.registers[cv.addr]);
+      if (!on) return;
+      const ref = refs.tread[cv.id];
+      beltOffset[cv.id] = (beltOffset[cv.id] - 80 * dt / 1000) % BELT_TREAD;
+      ref.node.setAttribute('transform', `translate(${beltOffset[cv.id]},0)`);
+    });
+
+    requestAnimationFrame(loop);
+  }
+
+  // ── CLOCK ────────────────────────────────────────────────────────────────────
+  function tick() {
+    const now = new Date();
+    $('#clock').textContent =
+      now.toLocaleTimeString('id-ID', { hour12: false }) + ' ' +
+      now.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+  }
+
+  // ── INIT ─────────────────────────────────────────────────────────────────────
+  buildMimic();
+  buildCookerCards();
+  buildConveyors();
+  buildCommands();
+  log('ok', 'SYSTEM', 'Kuali HMI siap');
+  render();
+  requestAnimationFrame(loop);
+  setInterval(tick, 500);
+  connectWS();
+
+  $('#ackBtn').addEventListener('click', () => {
+    state.alarms.forEach((a) => { a.ack = true; });
+    renderLog();
+    render();
+  });
+
+  // Public API — untuk debugging / integrasi manual
+  window.KualiHMI = {
+    getState: () => state,
+    sendCommand,
+    // Inject register values manually (e.g., for testing without PLC):
+    // KualiHMI.inject({ 1: 1, 2: 0, 3: 1, 4: 1, 5: 0, 6: 0, 7: 1, 8: 0 })
+    inject(regs) {
+      Object.entries(regs).forEach(([k, v]) => { state.registers[Number(k)] = Number(v); });
+      render();
+    },
+    ADDR,
+  };
 })();

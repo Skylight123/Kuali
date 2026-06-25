@@ -1,42 +1,23 @@
-# Modbus register map — sesuaikan dengan register PLC aktual
-# Format: NAMA = alamat (int, basis 0)
+# Modbus register map — sesuaikan nomor alamat dengan PLC aktual
+# Semua nilai adalah Modbus holding-register address (basis 1, Modbus convention)
 
-# --- Cooker 1 ---
-C1_TEMP_PV      = 0x0100   # current temperature (×10, e.g. 2250 = 225.0 °C)
-C1_TEMP_SP      = 0x0101   # setpoint temperature
-C1_MODE         = 0x0102   # 0=idle 1=heating 2=cooking 3=fault
-C1_BATCH        = 0x0103   # 0=empty 1=loading 2=cooking 3=done
-C1_PROGRESS     = 0x0104   # 0–100 %
-C1_RUNTIME      = 0x0105   # seconds in current batch
-C1_FAULT_CODE   = 0x0106
+# --- Status (read) ---
+STIRRER_1   = 1    # 0=off  1=on
+STIRRER_2   = 2    # 0=off  1=on
 
-# --- Cooker 2 ---
-C2_TEMP_PV      = 0x0110
-C2_TEMP_SP      = 0x0111
-C2_MODE         = 0x0112
-C2_BATCH        = 0x0113
-C2_PROGRESS     = 0x0114
-C2_RUNTIME      = 0x0115
-C2_FAULT_CODE   = 0x0116
+CONVEYOR_1  = 3    # mie       — 0=stop 1=jalan
+CONVEYOR_2  = 4    # sauce 1
+CONVEYOR_3  = 5    # sauce 2
+CONVEYOR_4  = 6    # topping 1
+CONVEYOR_5  = 7    # topping 2
+CONVEYOR_6  = 8    # topping 3
 
-# --- Conveyor 1 ---
-CV1_STATE       = 0x0200   # 0=stopped 1=running 2=fault
-CV1_SPEED       = 0x0201   # 0–100 %
-CV1_LOAD        = 0x0202
-CV1_FAULT       = 0x0203
+# --- Perintah (write) ---
+CMD_9       = 9    # tujuan disesuaikan kebutuhan
+CMD_10      = 10
 
-# --- Conveyor 2 ---
-CV2_STATE       = 0x0210
-CV2_SPEED       = 0x0211
-CV2_LOAD        = 0x0212
-CV2_FAULT       = 0x0213
-
-# --- Conveyor 3 ---
-CV3_STATE       = 0x0220
-CV3_SPEED       = 0x0221
-CV3_LOAD        = 0x0222
-CV3_FAULT       = 0x0223
-
-# --- Line control ---
-LINE_MODE       = 0x0300   # 0=manual 1=auto
-LINE_ESTOP      = 0x0301   # 0=normal 1=e-stop active
+# Semua address dalam satu list (untuk bulk read)
+STATUS_ADDRS  = [STIRRER_1, STIRRER_2,
+                 CONVEYOR_1, CONVEYOR_2, CONVEYOR_3,
+                 CONVEYOR_4, CONVEYOR_5, CONVEYOR_6]
+COMMAND_ADDRS = [CMD_9, CMD_10]

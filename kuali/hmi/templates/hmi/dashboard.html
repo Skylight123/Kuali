@@ -29,13 +29,11 @@
 
     <div class="topbar-spacer"></div>
 
-    <div id="linePill" class="line-pill is-run"><i></i><span id="lineText">LINE RUNNING</span></div>
-    <div class="header-stat"><small>Batch Aktif</small><strong id="activeBatch">0/2</strong></div>
-    <div class="header-stat"><small>Output Hari Ini</small><strong id="outputCount">0 porsi</strong></div>
+    <div id="linePill" class="line-pill is-stop"><i></i><span id="lineText">CONNECTING…</span></div>
+    <div class="header-stat"><small>Stirrer Aktif</small><strong id="activeBatch">0/2</strong></div>
+    <div class="header-stat"><small>Conveyor Aktif</small><strong id="outputCount">0/6</strong></div>
     <div class="header-stat"><small>Alarm</small><strong id="alarmCount">0</strong></div>
     <div class="clock" id="clock">--:--:--</div>
-    <button class="tool-btn is-active" type="button" id="autoBtn">AUTO ▸ ON</button>
-    <button class="tool-btn danger" type="button" id="estopBtn">⏻ E-STOP</button>
     <div class="user-block">
       <span class="user-name">{{ request.user.get_short_name|default:request.user.username }}</span>
       <form method="post" action="{% url 'logout' %}" style="display:inline;margin:0">
@@ -70,36 +68,32 @@
     <section class="panel conveyor-panel">
       <div class="panel-head">
         <span>Conveyor Bahan</span>
-        <small>3 lane · metered feed</small>
+        <small>6 lane · mie / sauce / topping</small>
       </div>
       <div id="conveyorGrid" class="conveyor-grid"></div>
     </section>
 
     <section class="panel recipe-panel">
       <div class="panel-head">
-        <span>Line Overview</span>
-        <small>ready for websocket / modbus</small>
+        <span>Perintah PLC</span>
+        <small>write addr 9 &amp; 10</small>
       </div>
-      <div class="overview-grid">
-        <div>
-          <small>Set Temp</small>
-          <strong>225 °C</strong>
-          <span>target cooker</span>
-        </div>
-        <div>
-          <small>Cycle Avg</small>
-          <strong>24 s</strong>
-          <span>per batch demo</span>
-        </div>
-        <div>
-          <small>Safety</small>
-          <strong id="safetyState">NORMAL</strong>
-          <span>interlock active</span>
-        </div>
+      <div class="cmd-panel" id="commandPanel"></div>
+      <div class="overview-grid" style="border-top:1px solid var(--line)">
         <div>
           <small>Operator</small>
           <strong>{{ request.user.get_short_name|default:request.user.username }}</strong>
           <span>authenticated</span>
+        </div>
+        <div>
+          <small>Mode</small>
+          <strong id="modeTag">MONITOR</strong>
+          <span>read-only PLC</span>
+        </div>
+        <div>
+          <small>Versi</small>
+          <strong>v1.0</strong>
+          <span>Kuali HMI</span>
         </div>
       </div>
     </section>
