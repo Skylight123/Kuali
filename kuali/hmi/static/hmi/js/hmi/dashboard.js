@@ -53,6 +53,7 @@
     alarmId: 0,
     robotQueue: { rows: [], summary: { received: 0, processing: 0, error: 0 } },
     broker: { enabled: false, status: 'disabled', messages: [] },
+    modbus: { config: null, status: { status: 'disabled' }, result: null, error: '' },
   };
 
   // ── SVG REFS ────────────────────────────────────────────────────────────────
@@ -574,6 +575,200 @@
     });
   }
 
+
+  function modbusLabel(status) {
+    return {
+      connected: 'CONNECTED',
+      connecting: 'CONNECTING',
+      disconnected: 'DISCONNECTED',
+      failed: 'FAILED',
+      simulator: 'SIMULATOR',
+      disabled: 'DISABLED',
+    }[status] || String(status || '--').toUpperCase();
+  }
+
+  function selectedModbusFunction() {
+    const config = state.modbus.config;
+    const select = $('#modbusFunction');
+    if (!config || !select) return null;
+    const code = Number(select.value);
+    return (config.functions || []).find((item) => Number(item.code) === code) || null;
+  }
+
+  function renderModbusAllowed() {
+    const config = state.modbus.config;
+    const select = $('#modbusFunction');
+    const allowedEl = $('#modbusAllowed');
+    if (!config || !select || !allowedEl) return;
+    const code = String(select.value);
+    const allowed = (config.allowed_addresses || {})[code] || [];
+    allowedEl.textContent = allowed.length ? `Allowed: ${allowed.join(', ')}` : 'Allowed: belum dikonfigurasi di registers.py';
+
+    const fn = selectedModbusFunction();
+    const isRead = fn?.operation === 'read';
+    const isWrite = fn?.operation === 'write';
+    $('#modbusRead').disabled = !isRead || !allowed.length;
+    $('#modbusWrite').disabled = !isWrite || !allowed.length;
+    $('#modbusValues').disabled = !isWrite;
+  }
+
+  function populateModbusFunctions() {
+    const config = state.modbus.config;
+    const select = $('#modbusFunction');
+    if (!config || !select) return;
+    const current = select.value;
+    select.innerHTML = (config.functions || []).map((item) =>
+      `<option value="${item.code}">${escapeHtml(item.label)}</option>`
+    ).join('');
+    select.value = current || String(config.defaults?.function_code || 3);
+    $('#modbusAddress').value = $('#modbusAddress').value || config.defaults?.address || 1;
+    $('#modbusQuantity').value = $('#modbusQuantity').value || config.defaults?.quantity || 1;
+    $('#modbusQuantity').max = config.defaults?.max_quantity || 100;
+    renderModbusAllowed();
+  }
+
+  function renderModbusStatus() {
+    const status = state.modbus.status || {};
+    const pill = $('#modbusPill');
+    const summary = $('#modbusSummary');
+    const endpoint = $('#modbusEndpoint');
+    const slave = $('#modbusSlave');
+    const error = $('#modbusError');
+    if (!pill) return;
+    const statusName = status.status || 'disabled';
+    pill.dataset.status = statusName;
+    pill.textContent = modbusLabel(statusName);
+    if (summary) summary.textContent = modbusLabel(statusName).toLowerCase();
+    if (endpoint) endpoint.textContent = status.endpoint || '--';
+    if (slave) slave.textContent = status.slave_id ?? '--';
+    if (error) error.textContent = state.modbus.error || status.last_error || '';
+  }
+
+  function renderModbusResult() {
+    const host = $('#modbusResult');
+    const result = state.modbus.result;
+    if (!host) return;
+    if (!result) {
+      host.innerHTML = '<div class="broker-empty">Belum ada response Modbus</div>';
+      return;
+    }
+    const values = (result.values || []).map((value, idx) => ({ address: Number(result.address) + idx, value }));
+    host.innerHTML = `
+      <div class="broker-msg">
+        <time>${escapeHtml(formatTime(new Date().toISOString()))}</time>
+        <strong>FC ${escapeHtml(result.function_code)} · addr ${escapeHtml(result.address)} · qty ${escapeHtml(result.quantity)}</strong>
+        <code>${escapeHtml(JSON.stringify(values, null, 2))}</code>
+      </div>`;
+  }
+
+  async function loadModbusConfig() {
+    try {
+      const response = await fetch(`${getBasePath()}/api/modbus-config/`, { credentials: 'same-origin' });
+      if (!response.ok) return;
+      state.modbus.config = await response.json();
+      state.modbus.status = state.modbus.config.serial_status || state.modbus.status;
+      populateModbusFunctions();
+      renderModbusStatus();
+      renderModbusResult();
+    } catch (_) { /* modbus panel keeps last known state */ }
+  }
+
+  async function loadModbusStatus() {
+    try {
+      const response = await fetch(`${getBasePath()}/api/modbus-status/`, { credentials: 'same-origin' });
+      if (!response.ok) return;
+      state.modbus.status = await response.json();
+      renderModbusStatus();
+    } catch (_) { /* modbus status remains last known */ }
+  }
+
+  async function reconnectModbus() {
+    try {
+      state.modbus.error = '';
+      state.modbus.status = { ...(state.modbus.status || {}), status: 'connecting' };
+      renderModbusStatus();
+      const result = await postModbus('/api/modbus-reconnect/', {});
+      state.modbus.status = result.serial_status || state.modbus.status;
+      if (result.snapshot?.registers) {
+        state.regs = Object.fromEntries(Object.entries(result.snapshot.registers).map(([k, v]) => [Number(k), v]));
+        render();
+      }
+      renderModbusStatus();
+      log('ok', 'MODBUS', 'Reconnect serial berhasil');
+    } catch (err) {
+      state.modbus.error = err?.error || 'Reconnect Modbus gagal';
+      state.modbus.status = err?.serial_status || state.modbus.status;
+      renderModbusStatus();
+      log('warn', 'MODBUS', state.modbus.error);
+    }
+  }
+
+  function modbusBasePayload() {
+    return {
+      function_code: Number($('#modbusFunction').value),
+      address: Number($('#modbusAddress').value),
+      quantity: Number($('#modbusQuantity').value || 1),
+    };
+  }
+
+  async function postModbus(url, payload) {
+    const response = await fetch(`${getBasePath()}${url}`, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': decodeURIComponent(getCookie('csrftoken')),
+      },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok) throw data;
+    return data;
+  }
+
+  async function doModbusRead() {
+    try {
+      state.modbus.error = '';
+      const result = await postModbus('/api/modbus-read/', modbusBasePayload());
+      state.modbus.result = result;
+      state.modbus.status = result.serial_status || state.modbus.status;
+      renderModbusStatus();
+      renderModbusResult();
+      log('ok', 'MODBUS', `Read FC ${result.function_code} addr ${result.address}`);
+    } catch (err) {
+      state.modbus.error = err?.error || 'Read Modbus gagal';
+      state.modbus.status = err?.serial_status || state.modbus.status;
+      renderModbusStatus();
+      log('warn', 'MODBUS', state.modbus.error);
+    }
+  }
+
+  async function doModbusWrite() {
+    const valueText = ($('#modbusValues').value || '').trim();
+    if (!valueText) {
+      state.modbus.error = 'Value wajib diisi untuk write';
+      renderModbusStatus();
+      return;
+    }
+    try {
+      state.modbus.error = '';
+      const result = await postModbus('/api/modbus-write/', {
+        ...modbusBasePayload(),
+        values: valueText.split(',').map((item) => item.trim()).filter(Boolean),
+      });
+      state.modbus.result = result;
+      state.modbus.status = result.serial_status || state.modbus.status;
+      renderModbusStatus();
+      renderModbusResult();
+      log('ok', 'MODBUS', `Write FC ${result.function_code} addr ${result.address}`);
+    } catch (err) {
+      state.modbus.error = err?.error || 'Write Modbus gagal';
+      state.modbus.status = err?.serial_status || state.modbus.status;
+      renderModbusStatus();
+      log('warn', 'MODBUS', state.modbus.error);
+    }
+  }
+
   // ── WEBSOCKET ────────────────────────────────────────────────────────────────
   let ws = null;
   let wsTimer = null;
@@ -607,6 +802,10 @@
         if (payload.broker_status) {
           state.broker = payload.broker_status;
           renderBrokerStatus();
+        }
+        if (payload.serial_status) {
+          state.modbus.status = payload.serial_status;
+          renderModbusStatus();
         }
       } catch (_) { /* ignore malformed frames */ }
     };
@@ -674,12 +873,16 @@
   initPanelToggles();
   loadRobotQueue();
   loadBrokerStatus();
+  loadModbusConfig();
   setInterval(loadRobotQueue, 3000);
   setInterval(loadBrokerStatus, 3000);
+  setInterval(loadModbusStatus, 3000);
   log('ok', 'SYSTEM', 'Kuali HMI siap');
   render();
   renderRobotQueue();
   renderBrokerStatus();
+  renderModbusStatus();
+  renderModbusResult();
   requestAnimationFrame(loop);
   setInterval(tick, 500);
   connectWS();
@@ -689,6 +892,10 @@
   });
 
   $('#brokerReconnect')?.addEventListener('click', reconnectBroker);
+  $('#modbusRefresh')?.addEventListener('click', reconnectModbus);
+  $('#modbusFunction')?.addEventListener('change', renderModbusAllowed);
+  $('#modbusRead')?.addEventListener('click', doModbusRead);
+  $('#modbusWrite')?.addEventListener('click', doModbusWrite);
 
   $('#ackBtn').addEventListener('click', () => {
     state.alarms.forEach((a) => { a.ack = true; });

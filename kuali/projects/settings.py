@@ -14,14 +14,15 @@ from pathlib import Path
 import os
 from decouple import config 
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
+# =========================
+# PROJECT PATHS
+# =========================
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
-
-# SECURITY WARNING: keep the secret key used in production secret!
+# =========================
+# SECURITY / DEBUG CONFIG
+# =========================
 SECRET_KEY = config(
     'SECRET_KEY',
     default='django-insecure-local-development-key-change-me'
@@ -51,6 +52,9 @@ def origins_from_hosts(hosts):
     return origins
 
 
+# =========================
+# HOSTS / ORIGIN CONFIG
+# =========================
 HOST = config('HOST', default='').strip()
 HOSTS = parse_csv(config('HOSTS', default=HOST or '127.0.0.1'))
 ALLOWED_HOSTS = list(dict.fromkeys([
@@ -68,7 +72,6 @@ if FORCE_SCRIPT_NAME in ['', '/']:
 elif not FORCE_SCRIPT_NAME.startswith('/'):
     FORCE_SCRIPT_NAME = f'/{FORCE_SCRIPT_NAME}'
 
-# Tidak memakai domain/public origin. Origin dipercaya dibangun dari HOSTS/IP.
 PUBLIC_ORIGIN = config('PUBLIC_ORIGIN', default='').strip()
 PUBLIC_ORIGINS = origins_from_hosts(parse_csv(PUBLIC_ORIGIN))
 HOST_ORIGINS = origins_from_hosts(ALLOWED_HOSTS)
@@ -77,12 +80,16 @@ SECURE_COOKIE_DEFAULT = (not DEBUG) and any(
     origin.startswith('https://') for origin in PUBLIC_ORIGINS
 )
 
-# Nginx terminates TLS and forwards scheme/host to Daphne/Django.
+# =========================
+# FORWARDED HEADER CONFIG
+# =========================
 USE_X_FORWARDED_HOST = config('USE_X_FORWARDED_HOST', default=True, cast=bool)
 USE_X_FORWARDED_PORT = config('USE_X_FORWARDED_PORT', default=True, cast=bool)
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# Cookie-backed browser identity for Django's server-side session.
+# =========================
+# SESSION / CSRF COOKIE CONFIG
+# =========================
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
 SESSION_COOKIE_NAME = config('SESSION_COOKIE_NAME', default='kuali_sessionid')
 SESSION_COOKIE_AGE = 60 * 60 * 24 * 365
@@ -97,7 +104,9 @@ CSRF_COOKIE_SAMESITE = 'Lax'
 CSRF_COOKIE_PATH = FORCE_SCRIPT_NAME or '/'
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=SECURE_COOKIE_DEFAULT, cast=bool)
 
-# Application definition
+# =========================
+# DJANGO APPS / MIDDLEWARE CONFIG
+# =========================
 INSTALLED_APPS = [
     'daphne',    # Must be before staticfiles
     'channels',  # Must be before staticfiles
@@ -114,7 +123,6 @@ INSTALLED_APPS = [
     'rest_framework',
 ]
 
-# Set the ASGI application
 ASGI_APPLICATION = 'projects.asgi.application'
 
 MIDDLEWARE = [
@@ -130,7 +138,10 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'projects.urls'
 
-# Authentication Settings
+
+# =========================
+# AUTH / TEMPLATE CONFIG
+# =========================
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'hmi'
 LOGOUT_REDIRECT_URL = 'login'
@@ -153,15 +164,24 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'projects.wsgi.application'
 
+
+# =========================
+# CHANNELS / REDIS CONFIG
+# =========================
 REDIS_CACHE_URL = config('REDIS_CACHE_URL', default='')
 REDIS_CHANNEL_URL = config('REDIS_CHANNEL_URL', default='')
+REDIS_CHANNEL_PREFIX = config('REDIS_CHANNEL_PREFIX', default='')
 USE_REDIS_CHANNELS = config('USE_REDIS_CHANNELS', default=False, cast=bool)
+USE_REDIS_CACHE = config('USE_REDIS_CACHE', default=False, cast=bool)
 
 if USE_REDIS_CHANNELS and REDIS_CHANNEL_URL:
     CHANNEL_LAYERS = {
         'default': {
             'BACKEND': 'channels_redis.core.RedisChannelLayer',
-            'CONFIG': {'hosts': [REDIS_CHANNEL_URL]},
+            'CONFIG': {
+                'hosts': [REDIS_CHANNEL_URL],
+                'prefix': REDIS_CHANNEL_PREFIX,
+            },
         },
     }
 else:
@@ -171,9 +191,18 @@ else:
         },
     }
 
-# Database
-# https://docs.djangoproject.com/en/5.1/ref/settings/#databases
+if USE_REDIS_CACHE and REDIS_CACHE_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_CACHE_URL,
+            'KEY_PREFIX': REDIS_CACHE_PREFIX,
+        }
+    }
 
+# =========================
+# DATABASE CONFIG
+# =========================
 DB_NAME = config('DB_NAME', default='')
 
 if DB_NAME:
@@ -204,9 +233,9 @@ else:
     }
 
 
-# Password validation
-# https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
-
+# =========================
+# PASSWORD VALIDATION CONFIG
+# =========================
 AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
@@ -223,9 +252,9 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.1/topics/i18n/
-
+# =========================
+# LOCALIZATION / TIMEZONE CONFIG
+# =========================
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'Asia/Bangkok'
@@ -235,9 +264,9 @@ USE_I18N = True
 USE_TZ = False
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/5.1/howto/static-files/
-
+# =========================
+# STATIC / MEDIA FILE CONFIG
+# =========================
 URL_PREFIX = FORCE_SCRIPT_NAME or ''
 STATIC_URL = f'{URL_PREFIX}/static/' if URL_PREFIX else '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
@@ -248,16 +277,21 @@ STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
 MEDIA_URL = f'{URL_PREFIX}/media/' if URL_PREFIX else '/media/'
 MEDIA_ROOT = config('MEDIA_ROOT', default=os.path.join(BASE_DIR, 'media'))
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
-
+# =========================
+# DEFAULT MODEL FIELD CONFIG
+# =========================
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Allow specific frontend domains to access the Django API
+
+# =========================
+# CORS CONFIG
+# =========================
 CORS_ALLOWED_ORIGINS = CSRF_TRUSTED_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
 
-# Setting for Gmail SMTP
+# =========================
+# EMAIL / OTP CONFIG
+# =========================
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
 EMAIL_HOST = config('EMAIL_HOST', default='localhost')
 EMAIL_PORT = config('EMAIL_PORT', default=25, cast=int)
@@ -271,7 +305,9 @@ DEFAULT_FROM_EMAIL = config(
 )
 OTP_EMAIL_METHOD = config('OTP_EMAIL_METHOD', default='console')
 
-# MQTT
+# =========================
+# MQTT BROKER CONFIG
+# =========================
 MQTT_ENABLED    = config('MQTT_ENABLED',    default=False,       cast=bool)
 MQTT_BROKER     = config('MQTT_BROKER',     default='localhost')
 MQTT_PORT       = config('MQTT_PORT',       default=1883,        cast=int)
@@ -282,22 +318,25 @@ MQTT_TOPIC_ROOT = config('MQTT_TOPIC_ROOT', default='kuali')
 MQTT_ORDER_COMMAND_TOPIC = config('MQTT_ORDER_COMMAND_TOPIC', default='order/cmd/#')
 MQTT_ORDER_STATUS_DEVICE = config('MQTT_ORDER_STATUS_DEVICE', default='kuali')
 
-# Serial / PLC (Modbus RTU over RS-485)
-PLC_ENABLED     = config('PLC_ENABLED',     default=False,            cast=bool)
-PLC_MODE        = config('PLC_MODE',        default='simulator')  # 'rtu' | 'tcp' | 'simulator'
-SERIAL_PORT     = config('SERIAL_PORT',     default='/dev/ttyUSB0')
-SERIAL_BAUDRATE = config('SERIAL_BAUDRATE', default=9600,             cast=int)
-SERIAL_UNIT     = config('SERIAL_UNIT',     default=1,                cast=int)
-PLC_TCP_HOST    = config('PLC_TCP_HOST',    default='192.168.1.10')
-PLC_TCP_PORT    = config('PLC_TCP_PORT',    default=502,              cast=int)
+# =========================
+# PLC / MODBUS CONFIG
+# =========================
+PLC_ENABLED      = config('PLC_ENABLED',      default=False,       cast=bool)
+MODBUS_MODE      = config('MODBUS_MODE',      default='simulator')  # 'rtu' | 'tcp' | 'simulator'
+MODBUS_AUTO_CONNECT = config('MODBUS_AUTO_CONNECT', default=True, cast=bool)
+MODBUS_AUTO_DISCONNECT = config('MODBUS_AUTO_DISCONNECT', default=False, cast=bool)
+SERIAL_PORT      = config('SERIAL_PORT',      default='/dev/ttyUSB0')
+SERIAL_BAUDRATE  = config('SERIAL_BAUDRATE',  default=9600,        cast=int)
+SERIAL_PARITY    = config('SERIAL_PARITY',    default='N')          # 'N' | 'E' | 'O'
+SERIAL_STOPBITS  = config('SERIAL_STOPBITS',  default=1,           cast=int)
+SERIAL_BYTESIZE  = config('SERIAL_BYTESIZE',  default=8,           cast=int)
+SERIAL_TIMEOUT   = config('SERIAL_TIMEOUT',   default=5,           cast=float)
+PLC_TCP_HOST     = config('PLC_TCP_HOST',     default='192.168.1.10')
+PLC_TCP_PORT     = config('PLC_TCP_PORT',     default=502,         cast=int)
 PLC_POLL_INTERVAL_MS = config('PLC_POLL_INTERVAL_MS', default=500, cast=int)
 
-# SSL/TLS Settings
-#SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-
-#SECURE_SSL_REDIRECT = False
-#SESSION_COOKIE_SECURE = False
-#CSRF_COOKIE_SECURE = False
-
+# =========================
+# UPLOAD LIMIT CONFIG
+# =========================
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800
 FILE_UPLOAD_MAX_MEMORY_SIZE = 52428800

@@ -883,3 +883,55 @@ body.rail-collapsed .rail-toggle {
   .compact-panel .panel-head { grid-template-columns: minmax(0, 1fr) auto auto; }
   .broker-feed { max-height: 240px; }
 }
+
+
+/* Modbus slave remote panel */
+.modbus-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.modbus-grid label {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+.modbus-grid small,
+.modbus-allowed {
+  color: var(--faint);
+  font-size: 8px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.modbus-grid input,
+.modbus-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 30px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--txt);
+  background: #120c08;
+  padding: 6px 8px;
+  font: 600 10px var(--mono);
+}
+.modbus-grid select { grid-column: 1 / -1; }
+.modbus-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 7px;
+}
+.modbus-actions .mini-btn,
+#modbusRefresh {
+  min-height: 28px;
+}
+.modbus-allowed {
+  padding: 6px 7px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #130d09;
+  overflow-wrap: anywhere;
+}
+.modbus-result { max-height: 150px; }
+.broker-pill[data-status="simulator"] { color: var(--accent); border-color: rgba(231, 177, 90, .36); background: rgba(231, 177, 90, .08); }
+.broker-pill[data-status="disabled"] { color: var(--faint); }

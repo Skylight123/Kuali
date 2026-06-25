@@ -25,6 +25,18 @@ class IPlcGateway(ABC):
         ...
 
     @abstractmethod
+    def write_command(self, address: int, value: int) -> None:
+        ...
+
+    @abstractmethod
+    def remote_read(self, function_code: int, address: int, quantity: int = 1) -> dict:
+        ...
+
+    @abstractmethod
+    def remote_write(self, function_code: int, address: int, values) -> dict:
+        ...
+
+    @abstractmethod
     def close(self) -> None:
         ...
 

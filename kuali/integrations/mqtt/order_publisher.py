@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 
 from django.conf import settings
 
@@ -27,7 +28,7 @@ class MqttOrderStatusPublisher:
         topic = f"order/status/{self._device}"
         full_topic = f"{self._root}/{topic}" if self._root else topic
 
-        client = mqtt.Client(client_id=f"{settings.MQTT_CLIENT_ID}-pub")
+        client = mqtt.Client(client_id=f"{settings.MQTT_CLIENT_ID}-pub-{os.getpid()}")
         if settings.MQTT_USERNAME:
             client.username_pw_set(settings.MQTT_USERNAME, settings.MQTT_PASSWORD)
         client.connect(settings.MQTT_BROKER, settings.MQTT_PORT, keepalive=30)

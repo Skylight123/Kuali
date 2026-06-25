@@ -111,6 +111,10 @@ def orders_by_ids(order_ids):
     return RobotOrder.objects.filter(id__in=order_ids)
 
 
+def task_by_id(task_id: int) -> RobotOrderTask:
+    return RobotOrderTask.objects.select_related("order").get(id=task_id)
+
+
 def mark_task_processing(task: RobotOrderTask, stirrer: int, now=None) -> RobotOrderTask:
     now = now or timezone.now()
     task.status = RobotOrderTask.STATUS_PROCESSING

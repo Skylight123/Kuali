@@ -90,6 +90,33 @@
           </div>
         </section>
 
+        <section class="panel compact-panel modbus-panel is-collapsible" data-panel="modbus">
+          <div class="panel-head"><span>Modbus Slave</span><small id="modbusSummary">--</small><button class="panel-toggle" type="button" aria-label="Minimize Modbus Slave" title="Minimize panel">-</button></div>
+          <div class="panel-body broker-body modbus-body">
+            <div class="broker-status-row">
+              <span id="modbusPill" class="broker-pill" data-status="disabled">DISABLED</span>
+              <button class="mini-btn" id="modbusRefresh" type="button">Reconnect</button>
+            </div>
+            <div class="broker-meta">
+              <div><small>Serial</small><strong id="modbusEndpoint">--</strong></div>
+              <div><small>Slave ID</small><strong id="modbusSlave">--</strong></div>
+            </div>
+            <div class="modbus-grid">
+              <label><small>Function</small><select id="modbusFunction"></select></label>
+              <label><small>Address</small><input id="modbusAddress" type="number" min="0" step="1"></label>
+              <label><small>Quantity</small><input id="modbusQuantity" type="number" min="1" max="100" step="1"></label>
+              <label><small>Value(s)</small><input id="modbusValues" type="text" placeholder="1 atau 1,0,1"></label>
+            </div>
+            <div class="modbus-actions">
+              <button class="mini-btn" id="modbusRead" type="button">Read</button>
+              <button class="mini-btn" id="modbusWrite" type="button">Write</button>
+            </div>
+            <div class="broker-error" id="modbusError"></div>
+            <div class="modbus-allowed" id="modbusAllowed">Allowed: --</div>
+            <div class="broker-feed modbus-result" id="modbusResult"><div class="broker-empty">Belum ada response Modbus</div></div>
+          </div>
+        </section>
+
         <section class="panel compact-panel is-collapsible" data-panel="log">
           <div class="panel-head">
             <span>Log</span>

@@ -18,4 +18,9 @@ urlpatterns = [
     path("api/robot-order/", views.robot_order_api, name="robot_order_api"),
     path("api/broker-status/", views.broker_status_api, name="broker_status_api"),
     path("api/broker-reconnect/", views.broker_reconnect_api, name="broker_reconnect_api"),
+    path("api/modbus-config/", views.modbus_config_api, name="modbus_config_api"),
+    path("api/modbus-status/", views.modbus_status_api, name="modbus_status_api"),
+    path("api/modbus-reconnect/", views.modbus_reconnect_api, name="modbus_reconnect_api"),
+    path("api/modbus-read/", views.modbus_read_api, name="modbus_read_api"),
+    path("api/modbus-write/", views.modbus_write_api, name="modbus_write_api"),
 ]

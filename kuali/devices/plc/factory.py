@@ -7,6 +7,6 @@ from .simulator import SimulatorGateway
 
 
 def build_plc_gateway():
-    if not getattr(settings, "PLC_ENABLED", False) or settings.PLC_MODE == "simulator":
+    if not getattr(settings, "PLC_ENABLED", False) or settings.MODBUS_MODE == "simulator":
         return SimulatorGateway()
     return ModbusGateway()

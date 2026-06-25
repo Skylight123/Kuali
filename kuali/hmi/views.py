@@ -11,6 +11,9 @@ from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from databases import emailotpmodels
+from devices.plc import connection as plc_connection
+from devices.plc import registers as plc_registers
+from devices.plc import serial_monitor
 from integrations.mqtt import broker_monitor, order_listener
 from services import auth_service, robot_queue_service
 from services.auth_service import ONE_YEAR
@@ -246,6 +249,87 @@ def broker_reconnect_api(request):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
     return JsonResponse(order_listener.request_reconnect())
+
+
+@login_required
+def modbus_config_api(request):
+    return JsonResponse({
+        "functions": plc_registers.function_options(),
+        "slaves": plc_registers.slave_options(),
+        "default_slave": plc_registers.DEFAULT_MODBUS_SLAVE,
+        "allowed_addresses": {
+            str(code): plc_registers.allowed_addresses(code)
+            for code in plc_registers.MODBUS_FUNCTIONS
+        },
+        "defaults": {
+            "function_code": plc_registers.MODBUS_DEFAULT_FUNCTION,
+            "address": plc_registers.MODBUS_DEFAULT_ADDRESS,
+            "quantity": plc_registers.MODBUS_DEFAULT_QUANTITY,
+            "max_quantity": plc_registers.MODBUS_MAX_QUANTITY,
+        },
+        "serial_status": serial_monitor.snapshot(),
+    })
+
+
+@login_required
+def modbus_status_api(request):
+    return JsonResponse(serial_monitor.snapshot())
+
+
+@login_required
+def modbus_reconnect_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        return JsonResponse(plc_connection.reconnect(test_read=True))
+    except MODBUS_API_ERRORS as exc:
+        return JsonResponse({"error": str(exc), "serial_status": serial_monitor.snapshot()}, status=400)
+
+
+def _json_body(request):
+    return json.loads(request.body.decode("utf-8") or "{}")
+
+
+MODBUS_API_ERRORS = (ValueError, ConnectionError, OSError, ImportError)
+
+
+def _gateway_result(action):
+    return plc_connection.with_gateway(action)
+
+
+@login_required
+def modbus_read_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        payload = _json_body(request)
+        result = _gateway_result(lambda gateway: gateway.remote_read(
+            int(payload.get("function_code", plc_registers.MODBUS_DEFAULT_FUNCTION)),
+            int(payload.get("address", plc_registers.MODBUS_DEFAULT_ADDRESS)),
+            int(payload.get("quantity", 1)),
+        ))
+    except MODBUS_API_ERRORS as exc:
+        return JsonResponse({"error": str(exc), "serial_status": serial_monitor.snapshot()}, status=400)
+    return JsonResponse(result)
+
+
+@login_required
+def modbus_write_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        payload = _json_body(request)
+        values = payload.get("values", payload.get("value", []))
+        if isinstance(values, str):
+            values = [item.strip() for item in values.split(",") if item.strip()]
+        result = _gateway_result(lambda gateway: gateway.remote_write(
+            int(payload.get("function_code", plc_registers.WRITE_SINGLE_COIL)),
+            int(payload.get("address", plc_registers.CMD_9)),
+            values,
+        ))
+    except MODBUS_API_ERRORS as exc:
+        return JsonResponse({"error": str(exc), "serial_status": serial_monitor.snapshot()}, status=400)
+    return JsonResponse(result)
 
 def _start_otp_session(request, user, purpose):
     auth_service.start_otp_session(request, user, purpose)

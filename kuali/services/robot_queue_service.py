@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from databases import robot_order_repository as orders
 from devices.plc import registers as R
-from devices.plc.factory import build_plc_gateway
+from devices.plc import connection as plc_connection
 from devices.plc.poller import CHANNEL_GROUP
 from domain.models.robot_order import IncomingOrder
 from hmi.models import RobotOrder
@@ -44,11 +44,7 @@ def _registers(snapshot: dict | None) -> dict[int, int]:
 def _plc_snapshot(plc_gateway=None) -> dict:
     if plc_gateway is not None:
         return plc_gateway.read_all()
-    gateway = build_plc_gateway()
-    try:
-        return gateway.read_all()
-    finally:
-        gateway.close()
+    return plc_connection.with_gateway(lambda gateway: gateway.read_all())
 
 
 def _plc_is_on(registers: dict[int, int]) -> bool:
@@ -66,6 +62,18 @@ def _available_stirrers(registers: dict[int, int]) -> list[int]:
 
 def _active_register_for_stirrer(stirrer_id: int) -> int:
     return R.STIRRER_1 if stirrer_id == 1 else R.STIRRER_2
+
+
+def _command_address_for_stirrer(stirrer_id: int) -> int:
+    return R.CMD_9 if stirrer_id == 1 else R.CMD_10
+
+
+def _send_stirrer_command(stirrer_id: int, value: int, plc_gateway=None) -> None:
+    address = _command_address_for_stirrer(stirrer_id)
+    if plc_gateway is not None:
+        plc_gateway.write_command(address, value)
+        return
+    plc_connection.with_gateway(lambda gateway: gateway.write_command(address, value))
 
 
 def _plc_off_message() -> str:
@@ -100,12 +108,16 @@ def receive_order(payload: dict, plc_gateway=None, publisher: OrderStatusPublish
         orders.create_received_tasks(order, payload, cooking_units)
 
     publisher.publish_status(incoming.order_id, orders.ORDER_STATUS_RECEIVED)
-    dispatch_waiting_tasks(snapshot=snapshot, publisher=publisher)
+    dispatch_waiting_tasks(snapshot=snapshot, publisher=publisher, plc_gateway=plc_gateway)
     broadcast_queue_snapshot()
     return orders.get_order_by_order_id(incoming.order_id)
 
 
-def dispatch_waiting_tasks(snapshot: dict | None = None, publisher: OrderStatusPublisher | None = None) -> None:
+def dispatch_waiting_tasks(
+    snapshot: dict | None = None,
+    publisher: OrderStatusPublisher | None = None,
+    plc_gateway=None,
+) -> None:
     publisher = publisher or _default_publisher()
     if snapshot is None:
         snapshot = _plc_snapshot()
@@ -118,6 +130,7 @@ def dispatch_waiting_tasks(snapshot: dict | None = None, publisher: OrderStatusP
         return
 
     touched_orders: set[int] = set()
+    assigned_tasks: list[tuple[int, int]] = []
     with orders.atomic():
         occupied = {task.assigned_stirrer for task in orders.processing_tasks() if task.assigned_stirrer}
         free = [stirrer for stirrer in ready if stirrer not in occupied]
@@ -126,18 +139,35 @@ def dispatch_waiting_tasks(snapshot: dict | None = None, publisher: OrderStatusP
 
         now = timezone.now()
         for task, stirrer in zip(orders.waiting_tasks(len(free)), free):
-            orders.mark_task_processing(task, stirrer, now=now)
+            task = orders.mark_task_processing(task, stirrer, now=now)
+            assigned_tasks.append((task.id, stirrer))
             if task.order.aggregate_status != orders.ORDER_STATUS_PROCESSING:
                 orders.mark_order_processing(task.order)
             touched_orders.add(task.order.id)
 
-    for order in orders.orders_by_ids(touched_orders):
+    failed_order_ids: set[int] = set()
+    write_errors: list[tuple[str, str, str]] = []
+    for task_id, stirrer in assigned_tasks:
+        try:
+            _send_stirrer_command(stirrer, 1, plc_gateway=plc_gateway)
+        except Exception as exc:
+            message = f"Gagal kirim command PLC stirrer {stirrer}: {exc}"
+            logger.exception(message)
+            with orders.atomic():
+                task = orders.task_by_id(task_id)
+                orders.mark_task_error_and_order_error(task, message)
+                failed_order_ids.add(task.order.id)
+                write_errors.append((task.order.order_id, orders.ORDER_STATUS_ERROR, message))
+
+    for order in orders.orders_by_ids(touched_orders - failed_order_ids):
         publisher.publish_status(order.order_id, orders.ORDER_STATUS_PROCESSING)
+    for order_id, status, message in write_errors:
+        publisher.publish_status(order_id, status, message)
     if touched_orders:
         broadcast_queue_snapshot()
 
 
-def reconcile_plc_state(snapshot: dict, publisher: OrderStatusPublisher | None = None) -> dict:
+def reconcile_plc_state(snapshot: dict, publisher: OrderStatusPublisher | None = None, plc_gateway=None) -> dict:
     publisher = publisher or _default_publisher()
     registers = _registers(snapshot)
     now = timezone.now()
@@ -163,7 +193,7 @@ def reconcile_plc_state(snapshot: dict, publisher: OrderStatusPublisher | None =
                     if event:
                         publish.append(event)
 
-        dispatch_waiting_tasks(snapshot=snapshot, publisher=publisher)
+        dispatch_waiting_tasks(snapshot=snapshot, publisher=publisher, plc_gateway=plc_gateway)
 
     for order_id, status, message in publish:
         publisher.publish_status(order_id, status, message)

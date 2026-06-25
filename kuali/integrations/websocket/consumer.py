@@ -32,12 +32,8 @@ class HmiConsumer(AsyncJsonWebsocketConsumer):
             await self.send_json({"error": "Invalid write payload"})
             return
 
-        from devices.plc.factory import build_plc_gateway
-        gateway = build_plc_gateway()
-        try:
-            gateway.write_register(address, value)
-        finally:
-            gateway.close()
+        from devices.plc import connection as plc_connection
+        plc_connection.with_gateway(lambda gateway: gateway.write_command(address, value))
         await self.send_json({"write_ack": {"address": address, "value": value}})
 
     # Handler untuk pesan dari poller via Channel Layer

@@ -182,9 +182,13 @@ class PrefixedAuthFlowTests(TestCase):
 class FakeGateway:
     def __init__(self, registers):
         self.registers = registers
+        self.command_writes = []
 
     def read_all(self):
         return {"registers": self.registers}
+
+    def write_command(self, address, value):
+        self.command_writes.append((address, value))
 
     def close(self):
         pass
@@ -205,14 +209,16 @@ class RobotQueueServiceTests(TestCase):
 
     def test_order_qty_expands_to_stirrer_tasks_and_second_order_queues(self):
         publisher = FakePublisher()
+        gateway = self.ready_gateway()
         robot_queue_service.receive_order({
             "order_id": "ORD-0007",
             "items": [
                 {"menu": "mie_goreng", "option": 0, "qty": 2},
                 {"menu": "es_teh", "option": 0, "qty": 1},
             ],
-        }, plc_gateway=self.ready_gateway(), publisher=publisher)
+        }, plc_gateway=gateway, publisher=publisher)
 
+        self.assertEqual(gateway.command_writes, [(R.CMD_9, 1), (R.CMD_10, 1)])
         first_rows = list(RobotOrderTask.objects.order_by("id"))
         self.assertEqual(len(first_rows), 2)
         self.assertEqual([row.assigned_stirrer for row in first_rows], [1, 2])
@@ -226,8 +232,9 @@ class RobotQueueServiceTests(TestCase):
                 {"menu": "mie_goreng", "option": 2, "qty": 1},
                 {"menu": "es_teh", "option": 0, "qty": 1},
             ],
-        }, plc_gateway=self.ready_gateway(), publisher=publisher)
+        }, plc_gateway=gateway, publisher=publisher)
 
+        self.assertEqual(gateway.command_writes, [(R.CMD_9, 1), (R.CMD_10, 1)])
         rows = list(RobotOrderTask.objects.order_by("id"))
         self.assertEqual([(r.order.order_id, r.option, r.display_status) for r in rows], [
             ("ORD-0007", 0, "process stirrer 1"),
@@ -285,3 +292,61 @@ class RobotQueueServiceTests(TestCase):
         self.assertEqual(task.order.aggregate_status, RobotOrder.STATUS_DONE)
         self.assertEqual(publisher.events[-1]["status"], RobotOrder.STATUS_DONE)
 
+
+
+@override_settings(PLC_ENABLED=False, MODBUS_MODE="simulator", ALLOWED_HOSTS=["testserver"])
+class ModbusApiTests(TestCase):
+    def setUp(self):
+        User.objects.create_user(username="modbus_operator", password="TemporaryPass123")
+        self.client.login(username="modbus_operator", password="TemporaryPass123")
+
+    def test_modbus_config_read_and_write_use_registered_addresses(self):
+        response = self.client.get("/api/modbus-config/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("functions", response.json())
+
+        response = self.client.post(
+            "/api/modbus-read/",
+            data={"function_code": R.READ_HOLDING, "address": R.STIRRER_1, "quantity": 2},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["values"]), 2)
+
+        response = self.client.post(
+            "/api/modbus-read/",
+            data={"function_code": R.READ_COIL, "address": R.CMD_9, "quantity": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.post(
+            "/api/modbus-read/",
+            data={"function_code": R.READ_COIL, "address": R.SCANNER_COIL_START, "quantity": R.SCANNER_COIL_QUANTITY},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["values"]), R.SCANNER_COIL_QUANTITY)
+
+        response = self.client.post(
+            "/api/modbus-reconnect/",
+            data={},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["ok"])
+
+        response = self.client.post(
+            "/api/modbus-write/",
+            data={"function_code": R.WRITE_SINGLE_COIL, "address": R.CMD_9, "values": [1]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["values"], [1])
+
+        response = self.client.post(
+            "/api/modbus-write/",
+            data={"function_code": R.WRITE_SINGLE_COIL, "address": R.STIRRER_1, "values": [1]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)

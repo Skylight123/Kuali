@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import sys
 import threading
 import time
+from pathlib import Path
 
 from django.conf import settings
 
@@ -23,10 +25,32 @@ _client = None
 _client_lock = threading.RLock()
 
 _SKIP_COMMANDS = {"check", "migrate", "makemigrations", "showmigrations", "test", "shell", "collectstatic", "createsuperuser"}
+_SERVER_COMMANDS = {"daphne", "gunicorn", "uvicorn"}
+
+
+def _argv_tokens() -> set[str]:
+    return {Path(arg).name for arg in sys.argv if arg}
+
+
+def _is_runserver_process(tokens: set[str]) -> bool:
+    if "runserver" not in tokens:
+        return False
+    if os.environ.get("RUN_MAIN") == "true":
+        return True
+    return "--noreload" in tokens
+
+
+def _is_server_process() -> bool:
+    tokens = _argv_tokens()
+    if tokens & _SKIP_COMMANDS:
+        return False
+    if _is_runserver_process(tokens):
+        return True
+    return bool(tokens & _SERVER_COMMANDS or os.environ.get("KUALI_START_BACKGROUND") == "1")
 
 
 def should_start_listener() -> bool:
-    return bool(getattr(settings, "MQTT_ENABLED", False)) and not any(cmd in sys.argv for cmd in _SKIP_COMMANDS)
+    return bool(getattr(settings, "MQTT_ENABLED", False)) and _is_server_process()
 
 
 def _full_topic(relative_topic: str) -> str:
@@ -93,7 +117,8 @@ def _run_once() -> None:
     topic = _full_topic(getattr(settings, "MQTT_ORDER_COMMAND_TOPIC", "order/cmd/#"))
     broker_monitor.set_connecting(topic=topic)
 
-    client = mqtt.Client(client_id=f"{settings.MQTT_CLIENT_ID}-orders")
+    client_id = f"{settings.MQTT_CLIENT_ID}-orders-{os.getpid()}"
+    client = mqtt.Client(client_id=client_id)
     with _client_lock:
         _client = client
 
