@@ -257,14 +257,23 @@ DEFAULT_FROM_EMAIL = config(
 )
 OTP_EMAIL_METHOD = config('OTP_EMAIL_METHOD', default='console')
 
-# MQTT integration for kitchen robot devices.
-MQTT_ENABLED = config('MQTT_ENABLED', default=False, cast=bool)
-MQTT_HOST = config('MQTT_HOST', default='localhost')
-MQTT_PORT = config('MQTT_PORT', default=1883, cast=int)
-MQTT_USERNAME = config('MQTT_USERNAME', default='')
-MQTT_PASSWORD = config('MQTT_PASSWORD', default='')
-MQTT_CLIENT_ID = config('MQTT_CLIENT_ID', default='kuali-app')
-MQTT_TOPIC_ROOT = config('MQTT_TOPIC_ROOT', default='')
+# MQTT
+MQTT_ENABLED    = config('MQTT_ENABLED',    default=False,       cast=bool)
+MQTT_BROKER     = config('MQTT_BROKER',     default='localhost')
+MQTT_PORT       = config('MQTT_PORT',       default=1883,        cast=int)
+MQTT_USERNAME   = config('MQTT_USERNAME',   default='')
+MQTT_PASSWORD   = config('MQTT_PASSWORD',   default='')
+MQTT_CLIENT_ID  = config('MQTT_CLIENT_ID',  default='kuali-hmi')
+MQTT_TOPIC_ROOT = config('MQTT_TOPIC_ROOT', default='kuali')
+
+# Serial / PLC (Modbus RTU over RS-485)
+PLC_ENABLED     = config('PLC_ENABLED',     default=False,            cast=bool)
+PLC_MODE        = config('PLC_MODE',        default='simulator')  # 'rtu' | 'tcp' | 'simulator'
+SERIAL_PORT     = config('SERIAL_PORT',     default='/dev/ttyUSB0')
+SERIAL_BAUDRATE = config('SERIAL_BAUDRATE', default=9600,             cast=int)
+SERIAL_UNIT     = config('SERIAL_UNIT',     default=1,                cast=int)
+PLC_TCP_HOST    = config('PLC_TCP_HOST',    default='192.168.1.10')
+PLC_TCP_PORT    = config('PLC_TCP_PORT',    default=502,              cast=int)
 
 # SSL/TLS Settings
 #SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
