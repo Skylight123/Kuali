@@ -3,6 +3,8 @@ from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
+from databases import usermodels
+
 
 class LoginForm(forms.Form):
     username = forms.CharField(
@@ -87,13 +89,13 @@ class SignUpForm(forms.ModelForm):
 
     def clean_username(self):
         username = self.cleaned_data.get("username", "").strip()
-        if User.objects.filter(username__iexact=username).exists():
+        if usermodels.username_exists(username):
             raise forms.ValidationError("Username ini sudah terdaftar.")
         return username
 
     def clean_email(self):
         email = self.cleaned_data.get("email", "").strip().lower()
-        if User.objects.filter(email__iexact=email).exists():
+        if usermodels.email_exists(email):
             raise forms.ValidationError("Email ini sudah terdaftar.")
         return email
 

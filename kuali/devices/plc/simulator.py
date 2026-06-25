@@ -36,6 +36,7 @@ class SimulatorGateway(IPlcGateway):
                 R.STIRRER_1: stir1,
                 R.STIRRER_2: stir2,
                 **conveyors,
+                R.CMD_11: 1,
             }
         }
 

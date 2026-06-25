@@ -3,7 +3,9 @@ from django.test import TestCase, override_settings
 from django.urls import reverse, set_script_prefix
 
 from databases import emailotpmodels
-from hmi.models import EmailOTP, UserProfile
+from devices.plc import registers as R
+from hmi.models import EmailOTP, RobotOrder, RobotOrderTask, UserProfile
+from services import robot_queue_service
 
 
 @override_settings(
@@ -176,4 +178,110 @@ class PrefixedAuthFlowTests(TestCase):
         }, SCRIPT_NAME="/Kuali")
 
         self.assertRedirects(response, reverse("hmi"), fetch_redirect_response=False)
+
+class FakeGateway:
+    def __init__(self, registers):
+        self.registers = registers
+
+    def read_all(self):
+        return {"registers": self.registers}
+
+    def close(self):
+        pass
+
+
+class FakePublisher:
+    def __init__(self):
+        self.events = []
+
+    def publish_status(self, order_id, status, message=""):
+        self.events.append({"order_id": order_id, "status": status, "message": message})
+
+
+@override_settings(MQTT_ENABLED=False)
+class RobotQueueServiceTests(TestCase):
+    def ready_gateway(self):
+        return FakeGateway({R.CMD_11: 1, R.STIRRER_1: 0, R.STIRRER_2: 0})
+
+    def test_order_qty_expands_to_stirrer_tasks_and_second_order_queues(self):
+        publisher = FakePublisher()
+        robot_queue_service.receive_order({
+            "order_id": "ORD-0007",
+            "items": [
+                {"menu": "mie_goreng", "option": 0, "qty": 2},
+                {"menu": "es_teh", "option": 0, "qty": 1},
+            ],
+        }, plc_gateway=self.ready_gateway(), publisher=publisher)
+
+        first_rows = list(RobotOrderTask.objects.order_by("id"))
+        self.assertEqual(len(first_rows), 2)
+        self.assertEqual([row.assigned_stirrer for row in first_rows], [1, 2])
+        self.assertEqual([row.status for row in first_rows], [RobotOrderTask.STATUS_PROCESSING, RobotOrderTask.STATUS_PROCESSING])
+        self.assertIn({"order_id": "ORD-0007", "status": RobotOrder.STATUS_PROCESSING, "message": ""}, publisher.events)
+
+        robot_queue_service.receive_order({
+            "order_id": "ORD-0008",
+            "items": [
+                {"menu": "mie_goreng", "option": 1, "qty": 1},
+                {"menu": "mie_goreng", "option": 2, "qty": 1},
+                {"menu": "es_teh", "option": 0, "qty": 1},
+            ],
+        }, plc_gateway=self.ready_gateway(), publisher=publisher)
+
+        rows = list(RobotOrderTask.objects.order_by("id"))
+        self.assertEqual([(r.order.order_id, r.option, r.display_status) for r in rows], [
+            ("ORD-0007", 0, "process stirrer 1"),
+            ("ORD-0007", 0, "process stirrer 2"),
+            ("ORD-0008", 1, "antri"),
+            ("ORD-0008", 2, "antri"),
+        ])
+        self.assertIn({"order_id": "ORD-0008", "status": RobotOrder.STATUS_RECEIVED, "message": ""}, publisher.events)
+
+    def test_plc_not_on_publishes_error_feedback(self):
+        publisher = FakePublisher()
+        order = robot_queue_service.receive_order({
+            "order_id": "ORD-0009",
+            "items": [{"menu": "mie_goreng", "option": 0, "qty": 1}],
+        }, plc_gateway=FakeGateway({R.CMD_11: 0, R.STIRRER_1: 0, R.STIRRER_2: 0}), publisher=publisher)
+
+        order.refresh_from_db()
+        self.assertEqual(order.aggregate_status, RobotOrder.STATUS_ERROR)
+        self.assertEqual(order.tasks.first().status, RobotOrderTask.STATUS_ERROR)
+        self.assertEqual(publisher.events[-1]["status"], RobotOrder.STATUS_ERROR)
+        self.assertIn("cmd_11", publisher.events[-1]["message"])
+
+    def test_plc_on_but_stirrers_busy_keeps_order_queued(self):
+        publisher = FakePublisher()
+        order = robot_queue_service.receive_order({
+            "order_id": "ORD-0011",
+            "items": [{"menu": "mie_goreng", "option": 2, "qty": 1}],
+        }, plc_gateway=FakeGateway({R.CMD_11: 1, R.STIRRER_1: 1, R.STIRRER_2: 1}), publisher=publisher)
+
+        order.refresh_from_db()
+        task = order.tasks.get()
+        self.assertEqual(order.aggregate_status, RobotOrder.STATUS_RECEIVED)
+        self.assertEqual(task.status, RobotOrderTask.STATUS_RECEIVED)
+        self.assertEqual(task.display_status, "antri")
+        self.assertEqual(publisher.events[-1]["status"], RobotOrder.STATUS_RECEIVED)
+
+    def test_processing_task_done_when_plc_seen_on_then_off(self):
+        publisher = FakePublisher()
+        robot_queue_service.receive_order({
+            "order_id": "ORD-0010",
+            "items": [{"menu": "mie_goreng", "option": 0, "qty": 1}],
+        }, plc_gateway=FakeGateway({R.CMD_11: 1, R.STIRRER_1: 0}), publisher=publisher)
+
+        task = RobotOrderTask.objects.get()
+        self.assertEqual(task.status, RobotOrderTask.STATUS_PROCESSING)
+
+        robot_queue_service.reconcile_plc_state({"registers": {R.CMD_11: 1, R.STIRRER_1: 1}}, publisher=publisher)
+        task.refresh_from_db()
+        self.assertTrue(task.plc_seen_on)
+
+        robot_queue_service.reconcile_plc_state({"registers": {R.CMD_11: 1, R.STIRRER_1: 0}}, publisher=publisher)
+        task.refresh_from_db()
+        task.order.refresh_from_db()
+        self.assertEqual(task.status, RobotOrderTask.STATUS_DONE)
+        self.assertEqual(task.order.aggregate_status, RobotOrder.STATUS_DONE)
+        self.assertEqual(publisher.events[-1]["status"], RobotOrder.STATUS_DONE)
 

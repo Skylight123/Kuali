@@ -157,6 +157,20 @@ REDIS_CACHE_URL = config('REDIS_CACHE_URL', default='')
 REDIS_CHANNEL_URL = config('REDIS_CHANNEL_URL', default='')
 USE_REDIS_CHANNELS = config('USE_REDIS_CHANNELS', default=False, cast=bool)
 
+if USE_REDIS_CHANNELS and REDIS_CHANNEL_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {'hosts': [REDIS_CHANNEL_URL]},
+        },
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
+
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
@@ -265,6 +279,8 @@ MQTT_USERNAME   = config('MQTT_USERNAME',   default='')
 MQTT_PASSWORD   = config('MQTT_PASSWORD',   default='')
 MQTT_CLIENT_ID  = config('MQTT_CLIENT_ID',  default='kuali-hmi')
 MQTT_TOPIC_ROOT = config('MQTT_TOPIC_ROOT', default='kuali')
+MQTT_ORDER_COMMAND_TOPIC = config('MQTT_ORDER_COMMAND_TOPIC', default='order/cmd/#')
+MQTT_ORDER_STATUS_DEVICE = config('MQTT_ORDER_STATUS_DEVICE', default='kuali')
 
 # Serial / PLC (Modbus RTU over RS-485)
 PLC_ENABLED     = config('PLC_ENABLED',     default=False,            cast=bool)
@@ -274,6 +290,7 @@ SERIAL_BAUDRATE = config('SERIAL_BAUDRATE', default=9600,             cast=int)
 SERIAL_UNIT     = config('SERIAL_UNIT',     default=1,                cast=int)
 PLC_TCP_HOST    = config('PLC_TCP_HOST',    default='192.168.1.10')
 PLC_TCP_PORT    = config('PLC_TCP_PORT',    default=502,              cast=int)
+PLC_POLL_INTERVAL_MS = config('PLC_POLL_INTERVAL_MS', default=500, cast=int)
 
 # SSL/TLS Settings
 #SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')

@@ -22,10 +22,23 @@ class HmiConsumer(AsyncJsonWebsocketConsumer):
     async def disconnect(self, code: int) -> None:
         await self.channel_layer.group_discard(CHANNEL_GROUP, self.channel_name)
 
-    # Pesan dari browser → bisa dipakai untuk write command ke PLC nanti
+    # Pesan dari browser -> write command ke PLC.
     async def receive_json(self, content: dict, **kwargs) -> None:
-        # TODO: route write commands (e.g. set setpoint, toggle cooker)
-        pass
+        write = content.get("write") or {}
+        try:
+            address = int(write.get("address"))
+            value = int(write.get("value"))
+        except (TypeError, ValueError):
+            await self.send_json({"error": "Invalid write payload"})
+            return
+
+        from devices.plc.factory import build_plc_gateway
+        gateway = build_plc_gateway()
+        try:
+            gateway.write_register(address, value)
+        finally:
+            gateway.close()
+        await self.send_json({"write_ack": {"address": address, "value": value}})
 
     # Handler untuk pesan dari poller via Channel Layer
     async def plc_update(self, event: dict) -> None:

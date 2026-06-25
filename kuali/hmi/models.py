@@ -51,3 +51,79 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username} - {self.get_app_role_display()}"
+
+class RobotOrder(models.Model):
+    STATUS_RECEIVED = "received"
+    STATUS_PROCESSING = "processing"
+    STATUS_DONE = "done"
+    STATUS_ERROR = "error"
+    STATUS_CHOICES = (
+        (STATUS_RECEIVED, "Received"),
+        (STATUS_PROCESSING, "Processing"),
+        (STATUS_DONE, "Done"),
+        (STATUS_ERROR, "Error"),
+    )
+
+    order_id = models.CharField(max_length=64, unique=True)
+    aggregate_status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_RECEIVED)
+    raw_payload = models.JSONField(default=dict, blank=True)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        indexes = [
+            models.Index(fields=["aggregate_status", "created_at"], name="hmi_robot_order_status_idx"),
+        ]
+
+    def __str__(self):
+        return f"{self.order_id} - {self.aggregate_status}"
+
+
+class RobotOrderTask(models.Model):
+    STATUS_RECEIVED = "received"
+    STATUS_PROCESSING = "processing"
+    STATUS_DONE = "done"
+    STATUS_ERROR = "error"
+    STATUS_CHOICES = (
+        (STATUS_RECEIVED, "Antri"),
+        (STATUS_PROCESSING, "Processing"),
+        (STATUS_DONE, "Done"),
+        (STATUS_ERROR, "Error"),
+    )
+
+    order = models.ForeignKey(RobotOrder, on_delete=models.CASCADE, related_name="tasks")
+    menu = models.CharField(max_length=120)
+    option = models.IntegerField(default=0)
+    qty_index = models.PositiveIntegerField(default=1)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_RECEIVED)
+    assigned_stirrer = models.PositiveSmallIntegerField(blank=True, null=True)
+    plc_seen_on = models.BooleanField(default=False)
+    error_message = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    started_at = models.DateTimeField(blank=True, null=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["id"]
+        indexes = [
+            models.Index(fields=["status", "assigned_stirrer"], name="hmi_robot_task_state_idx"),
+            models.Index(fields=["created_at", "id"], name="hmi_robot_task_queue_idx"),
+        ]
+
+    @property
+    def display_status(self):
+        if self.status == self.STATUS_RECEIVED:
+            return "antri"
+        if self.status == self.STATUS_PROCESSING and self.assigned_stirrer:
+            return f"process stirrer {self.assigned_stirrer}"
+        if self.status == self.STATUS_ERROR:
+            return "error"
+        return self.status
+
+    def __str__(self):
+        return f"{self.order.order_id} option {self.option} - {self.display_status}"
+

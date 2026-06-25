@@ -46,7 +46,7 @@ class ModbusGateway(IPlcGateway):
 
     # ------------------------------------------------------------------
     def _read(self, address: int, count: int = 1) -> list[int]:
-        result = self._client.read_holding_registers(address, count, slave=self._unit)
+        result = self._client.read_holding_registers(address, count=count, slave=self._unit)
         if result.isError():
             raise ConnectionError(f"Modbus read error @ {address:#06x}")
         return result.registers
@@ -56,40 +56,20 @@ class ModbusGateway(IPlcGateway):
 
     # ------------------------------------------------------------------
     def read_cooker(self, cooker_id: int) -> CookerState:
-        base = R.C1_TEMP_PV if cooker_id == 1 else R.C2_TEMP_PV
-        regs = self._read(base, count=7)
-        return CookerState(
-            id=cooker_id,
-            temp_current=regs[0] / 10.0,
-            temp_setpoint=regs[1] / 10.0,
-            mode=CookerMode(list(CookerMode)[regs[2]].value),
-            batch=BatchState(list(BatchState)[regs[3]].value),
-            progress=regs[4],
-            runtime_s=regs[5],
-            fault_code=regs[6],
-        )
+        raise NotImplementedError("Kuali HMI uses read_all() register snapshots for cooker state")
 
     def read_conveyor(self, conveyor_id: int) -> ConveyorStatus:
-        bases = {1: R.CV1_STATE, 2: R.CV2_STATE, 3: R.CV3_STATE}
-        regs = self._read(bases[conveyor_id], count=4)
-        return ConveyorStatus(
-            id=conveyor_id,
-            state=list(ConveyorState)[regs[0]],
-            speed_pct=regs[1],
-            load_pct=regs[2],
-            fault_code=regs[3],
-        )
+        raise NotImplementedError("Kuali HMI uses read_all() register snapshots for conveyor state")
 
     def read_all(self) -> dict:
-        return {
-            "cookers": [
-                vars(self.read_cooker(1)),
-                vars(self.read_cooker(2)),
-            ],
-            "conveyors": [
-                vars(self.read_conveyor(i)) for i in range(1, 4)
-            ],
+        start = min(R.ALL_ADDRS)
+        end = max(R.ALL_ADDRS)
+        values = self._read(start, count=end - start + 1)
+        registers = {
+            address: values[address - start]
+            for address in R.ALL_ADDRS
         }
+        return {"registers": registers}
 
     def write_register(self, address: int, value: int) -> None:
         self._write(address, value)

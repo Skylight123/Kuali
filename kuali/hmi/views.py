@@ -1,15 +1,17 @@
+import json
 import logging
 from urllib.parse import urlsplit
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from databases import emailotpmodels
-from services import auth_service
+from services import auth_service, robot_queue_service
 from services.auth_service import ONE_YEAR
 
 from .forms import ChangePasswordForm, ForgotPasswordForm, LoginForm, OTPForm, SignUpForm
@@ -213,6 +215,24 @@ def change_password_view(request):
 
     return render(request, "frontpages/change_password.html", {"form": form})
 
+
+
+
+@login_required
+def robot_queue_api(request):
+    return JsonResponse(robot_queue_service.queue_snapshot())
+
+
+@login_required
+def robot_order_api(request):
+    if request.method != "POST":
+        return JsonResponse({"error": "Method not allowed"}, status=405)
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+        order = robot_queue_service.receive_order(payload)
+    except ValueError as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+    return JsonResponse({"order_id": order.order_id, "status": order.aggregate_status})
 
 def _start_otp_session(request, user, purpose):
     auth_service.start_otp_session(request, user, purpose)

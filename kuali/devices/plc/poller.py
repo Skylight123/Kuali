@@ -24,6 +24,8 @@ async def plc_poll_loop(gateway: IPlcGateway, interval_ms: int = 500) -> None:
     while True:
         try:
             state = gateway.read_all()
+            from services.robot_queue_service import reconcile_plc_state
+            state = reconcile_plc_state(state)
             await layer.group_send(
                 CHANNEL_GROUP,
                 {"type": "plc.update", "data": state},

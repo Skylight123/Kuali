@@ -1,8 +1,6 @@
 from django.conf import settings
-from django.contrib.auth.models import User
-from django.db import transaction
 
-from databases import emailotpmodels
+from databases import emailotpmodels, usermodels
 from hmi.models import UserProfile
 from services.otp_services import OTPService
 
@@ -28,53 +26,39 @@ def username_for_login(identifier):
     identifier = (identifier or "").strip()
     if not identifier:
         return identifier
-
-    matched_user = User.objects.filter(email__iexact=identifier).only("username").first()
-    if matched_user:
-        return matched_user.username
-
-    matched_user = User.objects.filter(username__iexact=identifier).only("username").first()
-    if matched_user:
-        return matched_user.username
-
-    return identifier
+    return usermodels.username_for_identifier(identifier) or identifier
 
 
 def get_user(user_id):
-    return User.objects.filter(id=user_id).first()
+    return usermodels.get_user(user_id)
 
 
 def find_user_by_email(email):
-    return User.objects.filter(email__iexact=email).first()
+    return usermodels.find_user_by_email(email)
 
 
 def create_signup_user(signup_data):
     username = (signup_data.get("username") or "").strip()
     email = emailotpmodels.normalize_email(signup_data.get("email"))
 
-    if User.objects.filter(username__iexact=username).exists():
+    if usermodels.username_exists(username):
         raise ValueError("Username sudah digunakan. Silakan daftar ulang.")
-    if User.objects.filter(email__iexact=email).exists():
+    if usermodels.email_exists(email):
         raise ValueError("Email sudah digunakan. Silakan daftar ulang.")
 
-    with transaction.atomic():
-        user = User.objects.create_user(
-            username=username,
-            email=email,
-            password=signup_data["password"],
-            first_name=signup_data.get("first_name", ""),
-        )
-        UserProfile.objects.create(user=user, app_role="operator")
-    return user
+    return usermodels.create_operator_user(
+        username=username,
+        email=email,
+        password=signup_data["password"],
+        first_name=signup_data.get("first_name", ""),
+    )
 
 
 def change_password(user_id, password):
     user = get_user(user_id)
     if not user:
         raise ValueError("Akun tidak ditemukan.")
-    user.set_password(password)
-    user.save()
-    return user
+    return usermodels.set_user_password(user, password)
 
 
 def start_otp_session(request, user, purpose):

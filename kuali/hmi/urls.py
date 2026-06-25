@@ -14,4 +14,6 @@ urlpatterns = [
     path("forgot-password/", views.forgot_password_view, name="forgot_password"),
     path("change-password/", views.change_password_view, name="change_password"),
     path("verify-otp/", views.verify_otp_view, name="verify_otp"),
+    path("api/robot-queue/", views.robot_queue_api, name="robot_queue_api"),
+    path("api/robot-order/", views.robot_order_api, name="robot_order_api"),
 ]

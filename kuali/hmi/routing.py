@@ -3,4 +3,5 @@ from integrations.websocket.consumer import HmiConsumer
 
 websocket_urlpatterns = [
     path("ws/hmi/", HmiConsumer.as_asgi()),
+    path("Kuali/ws/hmi/", HmiConsumer.as_asgi()),
 ]

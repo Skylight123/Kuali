@@ -14,6 +14,7 @@
     CONVEYOR_6: 8,
     CMD_9:      9,
     CMD_10:     10,
+    CMD_11:     11,
   };
 
   // ── CONVEYOR DEFINITIONS (3 group) ─────────────────────────────────────────
@@ -50,6 +51,7 @@
     registers: {},      // address(int) → value(int) — filled by WebSocket
     alarms: [],
     alarmId: 0,
+    robotQueue: { rows: [], summary: { received: 0, processing: 0, error: 0 } },
   };
 
   // ── SVG REFS ────────────────────────────────────────────────────────────────
@@ -60,6 +62,10 @@
   // ── SVG HELPERS ─────────────────────────────────────────────────────────────
   const NS = 'http://www.w3.org/2000/svg';
   const $ = (sel) => document.querySelector(sel);
+  const getBasePath = () => {
+    const match = location.pathname.match(/^(.+?)\/hmi\/?$/);
+    return match ? match[1] : '';
+  };
   const make = (tag, attrs, parent) => {
     const el = document.createElementNS(NS, tag);
     Object.entries(attrs || {}).forEach(([k, v]) => el.setAttribute(k, v));
@@ -262,8 +268,8 @@
             <strong id="stir-${ck.id}">OFF</strong>
           </div>
           <div class="readout">
-            <small>Addr Modbus</small>
-            <strong>${ADDR['STIRRER_' + ck.id]}</strong>
+            <small>PLC Ready</small>
+            <strong id="ready-${ck.id}">--</strong>
           </div>
           <div class="readout">
             <small>Status</small>
@@ -348,6 +354,17 @@
       lineText.textContent = 'CONNECTING…';
     }
 
+    const plcRaw = state.registers[ADDR.CMD_11];
+    const plcKnown = plcRaw !== undefined;
+    const plcOn = plcKnown && Number(plcRaw) === 1;
+    const plcStatus = $('#plcMainStatus');
+    if (plcStatus) {
+      plcStatus.textContent = plcKnown ? (plcOn ? 'ON' : 'OFF') : '--';
+      plcStatus.style.color = plcKnown ? (plcOn ? 'var(--run)' : 'var(--fault)') : 'var(--faint)';
+    }
+    const modeTag = $('#modeTag');
+    if (modeTag) modeTag.textContent = plcKnown ? (plcOn ? 'PLC ON' : 'PLC OFF') : 'MONITOR PLC';
+
     // Alarm badge
     const openAlarms = state.alarms.filter((a) => !a.ack).length;
     $('#alarmCount').textContent = openAlarms;
@@ -362,14 +379,18 @@
     // Stirrers
     COOKERS.forEach((ck) => {
       const on = Boolean(state.registers[ADDR['STIRRER_' + ck.id]]);
+      const isFault = plcKnown && !plcOn;
+      const displayState = on ? 'COOKING' : (isFault ? 'FAULT' : 'IDLE');
       const pillEl = $(`#pill-${ck.id}`);
-      pillEl.dataset.state = on ? 'COOKING' : 'IDLE';
-      pillEl.textContent = on ? 'JALAN' : 'IDLE';
+      pillEl.dataset.state = displayState;
+      pillEl.textContent = !plcKnown ? '--' : (isFault ? 'PLC OFF' : (on ? 'JALAN' : 'READY'));
       $(`#stir-${ck.id}`).textContent = on ? 'ON' : 'OFF';
       $(`#stir-${ck.id}`).style.color = on ? 'var(--run)' : 'var(--faint)';
-      $(`#stir-status-${ck.id}`).textContent = on ? 'Berputar' : 'Berhenti';
-      $(`#card-${ck.id}`).dataset.state = on ? 'COOKING' : 'IDLE';
-      refs.ring[ck.id].setAttribute('stroke', on ? 'var(--clay)' : 'var(--idle)');
+      $(`#ready-${ck.id}`).textContent = plcKnown ? (plcOn ? 'ON' : 'OFF') : '--';
+      $(`#ready-${ck.id}`).style.color = plcOn ? 'var(--run)' : (isFault ? 'var(--fault)' : 'var(--faint)');
+      $(`#stir-status-${ck.id}`).textContent = !plcKnown ? '--' : (isFault ? 'PLC Off' : (on ? 'Berputar' : 'Siap'));
+      $(`#card-${ck.id}`).dataset.state = displayState;
+      refs.ring[ck.id].setAttribute('stroke', on ? 'var(--clay)' : (isFault ? 'var(--fault)' : 'var(--idle)'));
       refs.steam[ck.id].style.opacity = on ? 1 : 0;
       refs.heat[ck.id].style.opacity = on ? 0.7 : 0;
       refs.mini[ck.id].textContent = on ? 'ON' : '--';
@@ -414,6 +435,35 @@
     }).join('');
   }
 
+  function renderRobotQueue() {
+    const body = $('#robotQueueBody');
+    const summary = $('#queueSummary');
+    if (!body) return;
+    const rows = state.robotQueue.rows || [];
+    const counts = state.robotQueue.summary || { received: 0, processing: 0, error: 0 };
+    if (summary) summary.textContent = `${counts.received || 0} antri · ${counts.processing || 0} proses`;
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="4">Belum ada antrian</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map((row) => `
+      <tr data-status="${row.raw_status || ''}">
+        <td>${row.id}</td>
+        <td>${row.order_name}</td>
+        <td>${row.option}</td>
+        <td title="${row.error_message || ''}">${row.status}</td>
+      </tr>`).join('');
+  }
+
+  async function loadRobotQueue() {
+    try {
+      const response = await fetch(`${getBasePath()}/api/robot-queue/`, { credentials: 'same-origin' });
+      if (!response.ok) return;
+      state.robotQueue = await response.json();
+      renderRobotQueue();
+    } catch (_) { /* dashboard remains usable offline */ }
+  }
+
   // ── WEBSOCKET ────────────────────────────────────────────────────────────────
   let ws = null;
   let wsTimer = null;
@@ -421,7 +471,7 @@
   function connectWS() {
     if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    ws = new WebSocket(`${proto}//${location.host}/ws/hmi/`);
+    ws = new WebSocket(`${proto}//${location.host}${getBasePath()}/ws/hmi/`);
     state.ws = 'connecting';
     render();
 
@@ -439,6 +489,10 @@
             state.registers[Number(addr)] = Number(val);
           });
           render();
+        }
+        if (payload.robot_queue) {
+          state.robotQueue = payload.robot_queue;
+          renderRobotQueue();
         }
       } catch (_) { /* ignore malformed frames */ }
     };
@@ -503,11 +557,18 @@
   buildCookerCards();
   buildConveyors();
   buildCommands();
+  loadRobotQueue();
+  setInterval(loadRobotQueue, 3000);
   log('ok', 'SYSTEM', 'Kuali HMI siap');
   render();
+  renderRobotQueue();
   requestAnimationFrame(loop);
   setInterval(tick, 500);
   connectWS();
+
+  $('#railToggle').addEventListener('click', () => {
+    document.body.classList.toggle('rail-collapsed');
+  });
 
   $('#ackBtn').addEventListener('click', () => {
     state.alarms.forEach((a) => { a.ack = true; });
